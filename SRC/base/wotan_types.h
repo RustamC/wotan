@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <array>
 #include "wotan_util.h"
 #include <pthread.h>
 
@@ -25,11 +26,13 @@
 enum e_direction{
 	INC_DIRECTION = 0,	/* going in the positive direction relative to coordinate system */
 	DEC_DIRECTION,		/* going in the negative direction relative to coordinate system */
-	BI_DIRECTION		/* signals can go in either direction on this kind of node */
+	BI_DIRECTION,		/* signals can go in either direction on this kind of node */
+	NO_DIRECTION = 3,
+	NUM_DIRECTIONS
 };
 
 /* graph nodes can represent different kinds of routing resources.
-   Names for printing are set in the g_rr_type_string variable */
+   Names for printing are set in the rr_node_typename variable */
 enum e_rr_type{
 	SOURCE = 0,	/* a signal source */
 	//VIRTUAL_SOURCE,	/* a virtual signal source -- to be placed on ipins to account for fanout */
@@ -40,7 +43,8 @@ enum e_rr_type{
 	CHANY,		/* a wire segment in a y-directed channel */
 	NUM_RR_TYPES
 };
-extern const std::string g_rr_type_string[NUM_RR_TYPES];
+constexpr std::array<e_rr_type, NUM_RR_TYPES> RR_TYPES = {{SOURCE, SINK, IPIN, OPIN, CHANX, CHANY}};
+constexpr std::array<const char *, NUM_RR_TYPES> rr_node_typename{{"SOURCE", "SINK", "IPIN", "OPIN", "CHANX", "CHANY"}};
 
 /* a pin on a physical block can be unconnected (OPEN), be a driver, or a receiver */
 enum e_pin_type{
@@ -49,31 +53,22 @@ enum e_pin_type{
 	RECEIVER
 };
 
+/* Orientations. */
+enum e_side {
+	TOP = 0,
+	RIGHT = 1,
+	BOTTOM = 2,
+	LEFT = 3,
+	NUM_SIDES
+};
+constexpr std::array<e_side, NUM_SIDES> SIDES = {{TOP, RIGHT, BOTTOM, LEFT}};                    //Set of all side orientations
+constexpr std::array<const char *, NUM_SIDES> SIDE_STRING = {{"TOP", "RIGHT", "BOTTOM", "LEFT"}}; //String versions of side orientations
+
 /* specifies direction of graph traversal */
 enum e_traversal_dir{
 	FORWARD_TRAVERSAL = 0,
 	BACKWARD_TRAVERSAL
 };
-
-
-/* specifies what form the contents of the rr structs file (parsed in during initialization) are expected to take 
-	RR_STRUCTS_VPR -- dumped routing resource structs from VPR. Should include lists of:
-			- rr nodes
-			- rr switches 
-			- physical block types
-			- grid entries
-			- rr node indices
-
-	RR_STRUCTS_SIMPLE -- indicates a simple one-source/one-sink graph. Should include lists of:
-			- rr nodes
-*/
-enum e_rr_structs_mode{
-	RR_STRUCTS_UNDEFINED = 0,
-	RR_STRUCTS_VPR,
-	RR_STRUCTS_SIMPLE,
-	NUM_RR_STRUCTS_MODES
-};
-extern const std::string g_rr_structs_mode_string[NUM_RR_STRUCTS_MODES];
 
 /* how do node buckets store path counts? does each
    bucket index correspond to a certain path weight?
@@ -137,12 +132,20 @@ typedef std::vector< RR_Switch_Inf > t_rr_switch_inf;
 /* helps to quickly find which block types are at which coordinates of the FPGA grid */
 typedef std::vector< std::vector< Grid_Tile > > t_grid;	//[x_coord][y_coord]
 
-/* [0..NUM_RR_TYPES-1][0..xsize-1][0..ysize-1][0..number of nodes at this location (indexable by ptc)]
-   Allows for an easy way of finding which rr node index is at a specific rr_type/x/y/ptc coordinate */
-typedef std::vector< std::vector< std::vector< std::vector<int> > > > t_rr_node_index;
+/* [0..num_rr_types-1][0..grid_width-1][0..grid_height-1][0..NUM_SIDES-1][0..max_ptc-1] 
+ Allows for an easy way of finding which rr node index is at a specific rr_type/x/y/side/ptc coordinate*/
+typedef std::vector<std::vector<std::vector<std::vector<std::vector<int>>>>> t_rr_node_indices;
 
 /* a chanwidth value for each x/y coordinate */
-typedef std::vector< std::vector< int > > t_chanwidth;
+struct t_chan_width {
+    int max = 0;
+    int x_max = 0;
+    int y_max = 0;
+    int x_min = 0;
+    int y_min = 0;
+    std::vector<int> x_list;
+    std::vector<int> y_list;
+};
 
 /* for keeping track of the distance from a given node to a source/sink for which path enumeration is being performed */
 typedef std::vector< SS_Distances > t_ss_distances;
@@ -151,13 +154,29 @@ typedef std::vector< SS_Distances > t_ss_distances;
 typedef std::vector< Node_Topological_Info > t_node_topo_inf;
 
 
+/**** Functions ****/
+std::vector<int> get_rr_node_indices(Arch_Structs *arch_structs,
+                                     const t_rr_node_indices &L_rr_node_indices,
+                                     int x,
+                                     int y,
+                                     e_rr_type rr_type,
+                                     int ptc);
+
+int get_rr_node_index(Arch_Structs *arch_structs,
+                      const t_rr_node_indices &L_rr_node_indices,
+                      int x,
+                      int y,
+                      e_rr_type rr_type,
+                      int ptc,
+                      e_side side = NUM_SIDES);
+
+
 /**** Classes ****/
 /* Contains user-defined options */
 class User_Options{
 public:
 	bool nodisp;				/* specifies whether to do graphics or not */
-	e_rr_structs_mode rr_structs_mode;	/* Wotan's routing structures are read-in according to this mode */
-	std::string rr_structs_file;		/* path to file from which rr structures are to be read */
+	std::string rr_graph_file;		/* path to file from which rr graph is to be read */
 	int max_connection_length;		/* maximum connection length to be considered during path enumeration */
 	bool analyze_core;			/* reachability analysis will only be performed for a core region of the FPGA */ //TODO: defined as what?
 
@@ -234,7 +253,9 @@ private:
 	short fan_in;					/* the fan-in to this node */
 	short num_out_edges;				/* number of edges emanating from this node */
 
+	/* @TODO: move direction & side to union as in t_rr_node */
 	enum e_direction direction;			/* direction along which signals would travel on this node (if applicable) */
+	enum e_side side;				/* Valid only for IPINs/OPINs */
 
 public:
 
@@ -264,6 +285,8 @@ public:
 	short get_fan_in() const;			/* get the fan-in of this node */
 	short get_num_out_edges() const;		/* get the number of edges emanating from this node */
 	e_direction get_direction() const;		/* get the directionality of this node in relation to the coordinate system (increasing/decreasing/bidir) */
+	e_side get_side() const;
+	const char *side_string() const;
 
 	/* set methods */
 	void set_rr_type(e_rr_type);			/* set rr type of this node */
@@ -274,6 +297,7 @@ public:
 	void set_ptc_num(short);			/* set pin-track-class number of this node */
 	void set_fan_in(short);				/* set fan-in of this node*/
 	void set_direction(e_direction);		/* set directionality of this node */
+	void set_side(e_side side);
 };
 
 
@@ -497,8 +521,7 @@ public:
 
 	t_block_type block_type;		/* a 1-D array of physical block types (i.e. CLB, empty, etc) */
 	t_grid grid;				/* a 2-D array where each entry gives info about the block type at that physical location */
-	t_chanwidth chanwidth_x;		/* a 2-D array where each entry gives the x-directed channel width at that coordinate */
-	t_chanwidth chanwidth_y;		/* a 2-D array where each entry gives the y-directed channel width at that coordiante */
+	t_chan_width chan_width;		/* chan_width is for x|y-directed channels; i.e. between rows */
 
 	/* allocator functions. if we want to move from vectors to C-style arrays, can change this, and deallocate in destructor or freeing function */
 	void alloc_and_create_block_type(int);
@@ -506,12 +529,13 @@ public:
 
 	/* set methods */
 	void set_fill_type();					/* sets 'fill_type_index' according to the most common block in 'grid' */
-	void set_chanwidth(Routing_Structs *routing_structs);	/* sets x-directed and y-directed channel widths */ 
 
 	/* get methods */
 	int get_fill_type_index() const;			/* returns 'fill_type_index' */
 	void get_grid_size(int *x_size, int *y_size) const;	/* returns x and y sizes of the grid */
 	int get_num_block_types() const;			/* returns number of physical block types */
+	int get_grid_width() const;
+	int get_grid_height() const;
 };
 
 
@@ -523,7 +547,7 @@ public:
 
 	t_rr_node rr_node;				/* a 1-D array of rr nodes */
 	t_rr_switch_inf rr_switch_inf;			/* a 1-D array of rr switch types */
-	t_rr_node_index rr_node_index;			/* a matrix for lookups of rr nodes at some physical location */
+	t_rr_node_indices rr_node_indices;		/* a matrix for lookups of rr nodes at some physical location */
 
 	/* allocator functions. if we want to move from vectors to C-style arrays, can change this, and deallocate in destructor */
 	void alloc_and_create_rr_node(int);
@@ -531,7 +555,7 @@ public:
 
 	void alloc_and_create_rr_switch_inf(int);
 
-	void alloc_and_create_rr_node_index(int num_rr_types, int x_size, int y_size);
+	void alloc_and_create_rr_node_index(int num_rr_types, int num_sides, int x_size, int y_size);
 
 	void init_rr_node_weights();
 

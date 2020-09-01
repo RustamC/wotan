@@ -1,5 +1,6 @@
 
 #include <cmath>
+#include <cassert>
 #include "io.h"
 #include "exception.h"
 #include "wotan_types.h"
@@ -7,28 +8,134 @@
 using namespace std;
 
 
-/* this has to exactly match e_rr_type */
-const string g_rr_type_string[NUM_RR_TYPES]{
-	"SOURCE",
-	//"VIRTUAL_SOURCE",
-	"SINK",
-	"IPIN",
-	"OPIN",
-	"CHANX",
-	"CHANY"
-};
+std::vector<int> get_rr_node_indices(Arch_Structs *arch_structs,
+					const t_rr_node_indices &L_rr_node_indices,
+					int x, 
+					int y,
+					e_rr_type rr_type,
+					int ptc) {
+	/*
+	 * Like get_rr_node_index() but returns all matching nodes,
+	 * rather than just the first. This is particularly useful for getting all instances
+	 * of a specific IPIN/OPIN at a specific gird tile (x,y) location.
+	 */
+	std::vector<int> indices;
 
-/* this has to exactly match e_rr_structs_mode */
-const string g_rr_structs_mode_string[NUM_RR_STRUCTS_MODES]{
-	"RR_STRUCTS_UNDEFINED",
-	"RR_STRUCTS_VPR",
-	"RR_STRUCTS_SIMPLE"
-};
+	if (rr_type == IPIN || rr_type == OPIN) {
+		//For pins we need to look at all the sides of the current grid tile
+
+		for (e_side side : SIDES) {
+			int rr_node_index = get_rr_node_index(arch_structs, L_rr_node_indices, x, y, rr_type, ptc, side);
+
+			if (rr_node_index >= 0) {
+				indices.push_back(rr_node_index);
+			}
+		}
+	} else {
+		//Sides do not effect non-pins so there should only be one per ptc
+		int rr_node_index = get_rr_node_index(arch_structs, L_rr_node_indices, x, y, rr_type, ptc);
+
+		if (rr_node_index != OPEN) {
+			indices.push_back(rr_node_index);
+		}
+	}
+
+	return indices;
+}
+
+int get_rr_node_index(Arch_Structs *arch_structs,
+			const t_rr_node_indices &L_rr_node_indices,
+			int x,
+			int y,
+			e_rr_type rr_type,
+			int ptc,
+			e_side side) {
+	/*
+	 * Returns the index of the specified routing resource node.  (x,y) are
+	 * the location within the FPGA, rr_type specifies the type of resource,
+	 * and ptc gives the number of this resource.  ptc is the class number,
+	 * pin number or track number, depending on what type of resource this
+	 * is.  All ptcs start at 0 and go up to pins_per_clb-1 or the equivalent.
+	 * There are type->num_class SOURCEs + SINKs, type->num_pins IPINs + OPINs,
+	 * and max_chan_width CHANX and CHANY (each).
+	 *
+	 * Note that for segments (CHANX and CHANY) of length > 1, the segment is
+	 * given an rr_index based on the (x,y) location at which it starts (i.e.
+	 * lowest (x,y) location at which this segment exists).
+	 * This routine also performs error checking to make sure the node in
+	 * question exists.
+	 *
+	 * The 'side' argument only applies to IPIN/OPIN types, and specifies which
+	 * side of the grid tile the node should be located on. The value is ignored
+	 * for non-IPIN/OPIN types
+	 */
+	if (rr_type == IPIN || rr_type == OPIN) {
+		if (side == NUM_SIDES)
+			WTHROW(EX_GRAPH, "IPIN/OPIN must specify desired side (can not be default NUM_SIDES)");
+	} else {
+		side = SIDES[0];
+	}
+
+	int iclass;
+
+	assert(ptc >= 0);
+	assert(x >= 0 && x < int(arch_structs->get_grid_width()));
+	assert(y >= 0 && y < int(arch_structs->get_grid_height()));
+
+	int block_type_ind = arch_structs->grid[x][y].get_type_index();
+	Physical_Type_Descriptor &ptd = arch_structs->block_type[block_type_ind];
+
+	/* Currently need to swap x and y for CHANX because of chan, seg convention */
+	if (CHANX == rr_type) {
+		std::swap(x, y);
+	}
+
+	/* Start of that block.  */
+	const std::vector<int> &lookup = L_rr_node_indices[rr_type][x][y][side];
+
+	/* Check valid ptc num */
+	assert(ptc >= 0);
+
+	switch (rr_type) {
+        	case SOURCE:
+			assert((size_t)ptc < ptd.class_inf.size());
+			// @TODO: Get node from Routing_Struct::rr_node[] and if it's virtual SOURCE than doesn't need next assert
+			//assert(ptd.class_inf[ptc].get_pin_type() == DRIVER);
+			break;
+
+		case SINK:
+			assert((size_t)ptc < ptd.class_inf.size());
+			assert(ptd.class_inf[ptc].get_pin_type() == RECEIVER);
+			break;
+
+		case OPIN:
+			assert(ptc < ptd.get_num_pins());
+			iclass = ptd.pin_class[ptc];
+			assert(ptd.class_inf[iclass].get_pin_type() == DRIVER);
+			break;
+
+		case IPIN:
+			assert(ptc < ptd.get_num_pins());
+			iclass = ptd.pin_class[ptc];
+			assert(ptd.class_inf[iclass].get_pin_type() == RECEIVER);
+			break;
+
+		case CHANX:
+		case CHANY:
+			break;
+
+		default:
+			WTHROW(EX_GRAPH, __FILE__ << ":" << __LINE__ << "Bad rr_node passed to get_rr_node_index." << endl
+				<< "Request for type=" << rr_type << " ptc=" << ptc << " at (" << x << ", " << y
+				<< ")." << endl);
+	}
+
+	return ((unsigned) ptc < lookup.size() ? lookup[ptc] : -1);
+}
 
 /*==== User Options Class ====*/
 User_Options::User_Options(){
 	this->nodisp = false;
-	this->rr_structs_mode = RR_STRUCTS_UNDEFINED;
 	this->num_threads = 1;
 	this->max_connection_length = 3;
 	this->analyze_core = true;
@@ -39,7 +146,7 @@ User_Options::User_Options(){
 
 	this->self_congestion_mode = MODE_NONE;
 
-	/* pin pbobabilities can be initialized from a file in the future, but for now set them
+	/* pin probabilities can be initialized from a file in the future, but for now set them
 	   to some default values */
 	this->ipin_probability = 0.0;	//was 0.3
 	this->opin_probability = 0.6;
@@ -180,6 +287,7 @@ RR_Node_Base::RR_Node_Base(){
 	this->direction = (e_direction)UNDEFINED;
 	this->out_edges = NULL;
 	this->out_switches = NULL;
+	this->side = NUM_SIDES;
 }
 
 RR_Node_Base::RR_Node_Base(const RR_Node_Base &obj){
@@ -235,8 +343,7 @@ e_rr_type RR_Node_Base::get_rr_type() const{
 
 /* Retrieve node's rr_type as a string */
 string RR_Node_Base::get_rr_type_string() const{
-	string type_str = g_rr_type_string[this->type];
-	return type_str;
+	return rr_node_typename[get_rr_type()];
 }
 
 /* get low x coordinate of this node */
@@ -307,6 +414,19 @@ e_direction RR_Node_Base::get_direction() const{
 	return this->direction;
 }
 
+/* get IPIN/OPIN side location */
+e_side RR_Node_Base::get_side() const {
+	if (get_rr_type() != IPIN && get_rr_type() != OPIN) {
+		WTHROW(EX_GRAPH, "Attempted to access RR node 'side' for non-IPIN/OPIN type " << get_rr_type_string());
+	}
+	return side;
+}
+
+/* get side name */
+const char *RR_Node_Base::side_string() const {
+	return SIDE_STRING[get_side()];
+}
+
 /* sets the rr type of this node */
 void RR_Node_Base::set_rr_type(e_rr_type t){
 	this->type = t;
@@ -364,6 +484,11 @@ void RR_Node_Base::set_fan_in(short f){
 /* set node direction */
 void RR_Node_Base::set_direction(e_direction dir){
 	this->direction = dir;
+}
+
+/* set node direction */
+void RR_Node_Base::set_side(e_side aside) {
+	this->side = aside;
 }
 
 /*==== END RR_Node_Base Class ====*/
@@ -1031,26 +1156,6 @@ void Arch_Structs::set_fill_type(){
 	this->fill_type_index = most_common_type;
 }
 
-/* sets x-directed and y-directed channel widths based on rr node indices */
-void Arch_Structs::set_chanwidth(Routing_Structs *routing_structs){
-	t_rr_node_index &rr_node_index = routing_structs->rr_node_index;
-
-	int x_entries, y_entries;
-	this->get_grid_size(&x_entries, &y_entries);
-
-	/* allocate structures */
-	this->chanwidth_x.assign(x_entries, vector<int>(y_entries, 0));
-	this->chanwidth_y.assign(x_entries, vector<int>(y_entries, 0));
-
-	/* now count the number of nodes in each x-directed and y-directed channel */
-	for (int ix = 0; ix < x_entries; ix++){
-		for (int iy = 0; iy < y_entries; iy++){
-			this->chanwidth_x[ix][iy] = (int)rr_node_index[CHANX][ix][iy].size();
-			this->chanwidth_y[ix][iy] = (int)rr_node_index[CHANY][ix][iy].size();
-		}
-	}
-}
-
 /* returns 'fill_type_index' -- the index of the most common block in the grid */
 int Arch_Structs::get_fill_type_index() const{
 	return this->fill_type_index;
@@ -1070,6 +1175,28 @@ void Arch_Structs::get_grid_size(int *x_size, int *y_size) const{
 
 	(*x_size) = grid_size_x;
 	(*y_size) = grid_size_y;
+}
+
+/* returns x size of the grid */
+int Arch_Structs::get_grid_width() const {
+	int grid_size_x;
+
+	grid_size_x = (int) this->grid.size();
+	return grid_size_x;
+}
+
+/* returns y size of the grid */
+int Arch_Structs::get_grid_height() const {
+	int grid_size_x;
+	int grid_size_y;
+
+	grid_size_x = (int) this->grid.size();
+	if (grid_size_x > 0) {
+		grid_size_y = (int) this->grid[0].size();
+	} else {
+		grid_size_y = 0;
+	}
+	return grid_size_y;
 }
 
 /* returns number of physical block types */
@@ -1100,14 +1227,16 @@ void Routing_Structs::alloc_and_create_rr_switch_inf(int n_rr_switches){
 }
 
 /* allocate and create the corresponding number of rr node index entries */
-void Routing_Structs::alloc_and_create_rr_node_index(int num_rr_types, int x_size, int y_size){
+void Routing_Structs::alloc_and_create_rr_node_index(int num_rr_types, int num_sides, int x_size, int y_size) {
 	vector<int> ptc_vec;
-	vector< vector<int> > y_vec;
-	vector< vector< vector<int> > > x_vec;
+	vector< vector<int> > sides_vec;
+	vector< vector< vector<int> > > y_vec;
+	vector< vector< vector< vector<int> > > > x_vec;
 
-	y_vec.assign(y_size, ptc_vec);
+	sides_vec.assign(num_sides, ptc_vec);
+	y_vec.assign(y_size, sides_vec);
 	x_vec.assign(x_size, y_vec);
-	this->rr_node_index.assign(num_rr_types, x_vec);
+	this->rr_node_indices.assign(num_rr_types, x_vec);
 }
 
 /* initializes node weights */

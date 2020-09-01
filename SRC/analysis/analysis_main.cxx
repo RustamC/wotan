@@ -13,7 +13,7 @@
 #include "wotan_types.h"
 #include "exception.h"
 #include "wotan_util.h"
-#include "draw.h"
+//#include "draw.h"
 #include "topological_traversal.h"
 #include "enumerate.h"
 #include "analysis_cutline.h"
@@ -313,16 +313,8 @@ static float analyze_lowest_probs_pqs( vector< t_lowest_probs_pq > &lowest_probs
 void run_analysis(User_Options *user_opts, Analysis_Settings *analysis_settings, Arch_Structs *arch_structs, 
 			Routing_Structs *routing_structs){
 
-	switch( user_opts->rr_structs_mode ){
-		case RR_STRUCTS_VPR:
-			analyze_fpga_architecture(user_opts, analysis_settings, arch_structs, routing_structs);
-			break;
-		case RR_STRUCTS_SIMPLE:
-			analyze_simple_graph(user_opts, analysis_settings, arch_structs, routing_structs);
-			break;
-		default:
-			WTHROW(EX_PATH_ENUM, "Encountered unrecognized rr_structs_mode: " << user_opts->rr_structs_mode); 
-	}
+	analyze_fpga_architecture(user_opts, analysis_settings, arch_structs, routing_structs);
+	//analyze_simple_graph(user_opts, analysis_settings, arch_structs, routing_structs);
 }
 
 /* performs routability analysis on an FPGA architecture */
@@ -369,7 +361,7 @@ static void analyze_fpga_architecture(User_Options *user_opts, Analysis_Settings
 		cout << "Absolute routability metric: " << 1.0/user_opts->demand_multiplier << endl;
 	}
 
-	update_screen(routing_structs, arch_structs, user_opts);
+	//update_screen(routing_structs, arch_structs, user_opts);
 }
 
 /* performs routability analysis on a simple one-source/one-sink graph */
@@ -472,7 +464,7 @@ static void analyze_simple_graph(User_Options *user_opts, Analysis_Settings *ana
 	cout << "Connection probability: " << connection_probability << endl;
 }
 
-/* enumerates paths from test tiles. typically path eneumeration would involve enumerating paths from		//TODO: outdated comment
+/* enumerates paths from test tiles. typically path enumeration would involve enumerating paths from		//TODO: outdated comment
    sources to sinks, but there are a few caveats that can't be easily intuited. specifically:
 	- A source or sink *node* is, in actually a super-source or super-sink; it is actually a collection of 
 	  sources (sinks) bundled together. This collection of sources (sinks) has an implicit crossbar
@@ -572,7 +564,9 @@ float analyze_test_tile_connections(User_Options *user_opts, Analysis_Settings *
 				/* enumerating from opins basically involves enumerating from the corresponding
 				   source */
 
-				int source_node_index = routing_structs->rr_node_index[SOURCE][tile_coord.x][tile_coord.y][iclass];
+				//int source_node_index = routing_structs->rr_node_indices[SOURCE][tile_coord.x][tile_coord.y][iclass];
+				int source_node_index = get_rr_node_index(arch_structs, routing_structs->rr_node_indices, tile_coord.x,
+										tile_coord.y, SOURCE, iclass);
 
 				vector<int> sink_indices;
 				vector<int> ss_length;
@@ -600,7 +594,9 @@ float analyze_test_tile_connections(User_Options *user_opts, Analysis_Settings *
 				   in wotan_init.cxx virtual sources were created for every sink and attached into the wires 
 				   that connect into the sink's ipins. these virtual sources are used to enumerate fanout paths */
 
-				int sink_node_index = routing_structs->rr_node_index[SOURCE][tile_coord.x][tile_coord.y][iclass];
+				//int sink_node_index = routing_structs->rr_node_indices[SOURCE][tile_coord.x][tile_coord.y][iclass];
+				int sink_node_index = get_rr_node_index(arch_structs, routing_structs->rr_node_indices, tile_coord.x,
+									tile_coord.y, SOURCE, iclass);
 				int virtual_source_ind = routing_structs->rr_node[sink_node_index].get_virtual_source_node_ind();
 
 				if (virtual_source_ind != UNDEFINED){
@@ -863,7 +859,8 @@ static void get_corresponding_sink_ids(User_Options *user_opts, Analysis_Setting
 						}
 
 						/* get node corresponding to this sink */	
-						int sink_node_ind = routing_structs->rr_node_index[SINK][dest_x][dest_y][iclass];
+						vector<int> sink_node_inds = get_rr_node_indices(arch_structs, routing_structs->rr_node_indices,
+													dest_x, dest_y, SINK, iclass);
 
 						//XXX
 						double rand_value = (double)rand() / (double)(RAND_MAX);
@@ -872,7 +869,8 @@ static void get_corresponding_sink_ids(User_Options *user_opts, Analysis_Setting
 							continue;
 						}
 
-						sink_indices.push_back( sink_node_ind );
+						//sink_indices.push_back( sink_node_ind );
+						sink_indices.insert(sink_indices.end(), sink_node_inds.begin(), sink_node_inds.end());
 						ss_length.push_back( ilen );
 
 						//XXX

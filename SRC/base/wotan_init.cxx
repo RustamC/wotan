@@ -7,8 +7,8 @@
 #include "globals.h"
 #include "exception.h"
 #include "io.h"
-#include "draw.h"
-#include "parse_rr_structs_file.h"
+//#include "draw.h"
+#include "parse_rr_graph_file.h"
 
 using namespace std;
 
@@ -55,7 +55,7 @@ void wotan_init(int argc, char **argv, User_Options *user_opts, Arch_Structs *ar
 	wotan_parse_command_args(argc, argv, user_opts);
 
 	/* parse user-specified rr structs file into Wotan's architecture and routing structures */
-	parse_rr_structs_file(user_opts->rr_structs_file, arch_structs, routing_structs, user_opts->rr_structs_mode);
+	parse_rr_graph_file(user_opts->rr_graph_file, arch_structs, routing_structs);
 
 	/* if Wotan structures are initialized from a structures file dumped by VPR, then Wotan 
 	   structures aren't complete just yet. need to allocate and set incoming edges for each node.
@@ -69,21 +69,16 @@ void wotan_init(int argc, char **argv, User_Options *user_opts, Arch_Structs *ar
 	/* all nodes */
 	initialize_reverse_node_edges_and_switches(routing_structs, UNDEFINED); 
 
-	if (user_opts->rr_structs_mode == RR_STRUCTS_VPR){
-		/* initialize analysis settings */
-		analysis_settings->alloc_and_set_pin_probabilities(user_opts->opin_probability, user_opts->ipin_probability, arch_structs);
-		analysis_settings->alloc_and_set_length_probabilities(user_opts);
-		analysis_settings->alloc_and_set_test_tile_coords(arch_structs, routing_structs);
+	/* initialize analysis settings */
+	analysis_settings->alloc_and_set_pin_probabilities(user_opts->opin_probability, user_opts->ipin_probability, arch_structs);
+	analysis_settings->alloc_and_set_length_probabilities(user_opts);
+	analysis_settings->alloc_and_set_test_tile_coords(arch_structs, routing_structs);
 
-		/* initialize path count history structures of rr nodes */
-		int fill_type_ind = arch_structs->get_fill_type_index();
-		if (user_opts->self_congestion_mode == MODE_RADIUS){
-			//TODO: allocate this in analysis_main::alloc_self_congestion_structs
-			routing_structs->alloc_rr_node_path_histories( (int)arch_structs->block_type[fill_type_ind].class_inf.size() );
-		}
-
-		/* initialize channel widths */
-		arch_structs->set_chanwidth( routing_structs );
+	/* initialize path count history structures of rr nodes */
+	int fill_type_ind = arch_structs->get_fill_type_index();
+	if (user_opts->self_congestion_mode == MODE_RADIUS){
+		//TODO: allocate this in analysis_main::alloc_self_congestion_structs
+		routing_structs->alloc_rr_node_path_histories( (int)arch_structs->block_type[fill_type_ind].class_inf.size() );
 	}
 
 	/* initialize rr node weights */
@@ -102,10 +97,10 @@ void wotan_init(int argc, char **argv, User_Options *user_opts, Arch_Structs *ar
 				max_block_pins = num_type_pins;
 			}
 		}
-		init_draw_coords((float)max_block_pins, routing_structs, arch_structs);
-		init_graphics("Wotan v0.1", WHITE);
+		//init_draw_coords((float)max_block_pins, routing_structs, arch_structs);
+		//init_graphics("Wotan v0.1", WHITE);
 
-		update_screen(routing_structs, arch_structs, user_opts);
+		//update_screen(routing_structs, arch_structs, user_opts);
 	}
 
 	return;
@@ -121,35 +116,15 @@ static void wotan_parse_command_args(int argc, char **argv, User_Options *user_o
 
 	/* next we read in the options */
 	for ( ; iopt < argc; iopt++ ){
-		if ( strcmp(argv[iopt], "-rr_structs_file") == 0 ){
+		if ( strcmp(argv[iopt], "-rr_graph_file") == 0 ){
 			/* Wotan structures to be initialized based on a dumped VPR structures file */
 			iopt++;
 			
 			if (iopt >= argc){
-				WTHROW(EX_INIT, "Expected an argument for the -rr_structs_file option");
+				WTHROW(EX_INIT, "Expected an argument for the -rr_graph_file option");
 			}
 
-			if (user_opts->rr_structs_mode == RR_STRUCTS_UNDEFINED){
-				user_opts->rr_structs_mode = RR_STRUCTS_VPR;	//if hasn't been set yet, then set the default. may be changed by a later cmd-line argument
-			}
-			user_opts->rr_structs_file = argv[iopt];
-		} else if ( strcmp(argv[iopt], "-rr_structs_mode") == 0 ){
-			/* specifies mode in which the rr structs file is expected to be */
-			iopt++;
-
-			if (iopt >= argc){
-				WTHROW(EX_INIT, "Expected an argument for the -rr_structs_mode option");
-			}
-
-			if ( strcmp(argv[iopt], "VPR") == 0 ){
-				cout << "Analyzing VPR structs." << endl;
-				user_opts->rr_structs_mode = RR_STRUCTS_VPR;
-			} else if ( strcmp(argv[iopt], "simple") == 0 ){
-				cout << "Analyzing basic structs." << endl;
-				user_opts->rr_structs_mode = RR_STRUCTS_SIMPLE;
-			} else {
-				WTHROW(EX_INIT, "Unrecognized rr structs mode: " << argv[iopt]);
-			}
+			 user_opts->rr_graph_file = argv[iopt];
 		} else if ( strcmp(argv[iopt], "-threads") == 0 ){
 			/* number of threads to use during path enumeration */
 			iopt++;
@@ -303,7 +278,7 @@ static void wotan_parse_command_args(int argc, char **argv, User_Options *user_o
 /* Prints intro title for the tool */
 static void wotan_print_title(){
 	cout << "===============================================" << endl;
-	cout << "                   Wotan v0.1                  " << endl;
+	cout << "                   Wotan v2.0                  " << endl;
 	cout << "   FPGA Routing Architecture Evaluation Tool   " << endl;
 	cout << "===============================================" << endl;
 	cout << endl;
@@ -317,18 +292,13 @@ static void wotan_print_usage(){
 	cout << "perform reachability analysis on different source/sink pairs." << endl << endl;
 	
 	cout << "Usage:" << endl;
-	cout << "\t./wotan -rr_structs_file <file_path> [-rr_structs_mode <VPR/simple>] [-threads <num_threads>] [-max_connection_length <max_length>]" << endl <<
+	cout << "\t./wotan -rr_graph_file <file_path> [-threads <num_threads>] [-max_connection_length <max_length>]" << endl <<
 		"\t\t[-analyze_core <y/n>] [-use_routing_node_demand <demand>]" << endl <<
 		"\t\t[-demand_multiplier <multiplier>] [-self_congestion_mode <none/radius/path_dependence>] [-seed <value>] [-nodisp]" << endl << endl;
 
 	cout << "Options:" << endl;
 
-	cout << "\t-rr_structs_file: used to specify a path to the structs file based on which Wotan will be initialized" << endl << endl;
-
-	cout << "\t-rr_structs_mode: used to specify what 'mode' Wotan should expect the rr_structs_file to be in. The allowed modes are:" << endl <<
-		"\t\tVPR -- expect rr structs file to contain dumped structures from VPR (default)" << endl <<
-		"\t\tsimple -- expect rr structs file to contain only the rr_node section (in the same format as for the dumped VPR structures file) with" << endl <<
-		"\t\t\tonly one source node and one sink node. This is useful for debugging and analyzing custom graphs" << endl << endl;
+	cout << "\t-rr_graph_file: used to specify a path to the graph file based on which Wotan will be initialized" << endl << endl;
 
 	cout << "\t-threads: used to specify the number of threads to be used during the path enumeration and probability analysis steps (default is 1)" << endl << endl;
 
@@ -364,16 +334,13 @@ static void wotan_print_usage(){
 
 /* checks the initialized state of the tool */
 static void check_setup( User_Options *user_opts, Arch_Structs *arch_structs, Routing_Structs *routing_structs ){
-	if (user_opts->rr_structs_mode == RR_STRUCTS_UNDEFINED){
-		WTHROW(EX_INIT, "Currently Wotan can only be initialized by reading a routing-resource structures file");
-	}
 
 	/* check that the FPGA architecture consists only of CLB blocks (except for the perimeter which is unavoidably I/O);
 	   only homogeneous architectures (in terms of block types) are allowed for now */
 	int grid_size_x, grid_size_y;
 	arch_structs->get_grid_size(&grid_size_x, &grid_size_y);
 
-	if (user_opts->rr_structs_mode == RR_STRUCTS_VPR){
+	{
 		if (grid_size_x < MIN_GRID_SIZE_X || grid_size_y < MIN_GRID_SIZE_Y){
 			WTHROW(EX_INIT, "Minimum allowed FPGA size is " << MIN_GRID_SIZE_X << " by " << MIN_GRID_SIZE_Y  << " logic block spans. " <<
 					"Specified FPGA size is " << grid_size_x << " by " << grid_size_y << endl);
@@ -406,21 +373,6 @@ static void check_setup( User_Options *user_opts, Arch_Structs *arch_structs, Ro
 			WTHROW(EX_INIT, "Only the 'none' self-congestion method is allowed if the -use_routing_node_demand option is used.");
 		}
 	}
-
-	/* if user selected rr_structs_mode to be 'simple', then graphics should be disabled and the -use_routing_node_demand option should have been specified */
-	if (user_opts->rr_structs_mode == RR_STRUCTS_SIMPLE){
-		if (user_opts->nodisp == false){
-			WTHROW(EX_INIT, "No display mode currently supported for use with the '-rr_structs_mode simple' option. Please use the -nodisp option to disable graphics");
-		}
-
-		if (user_opts->use_routing_node_demand != UNDEFINED){
-			WTHROW(EX_INIT, "The -use_routing_node_demand option does currently does not work.");
-		}
-		//if (user_opts->use_routing_node_demand < 0){
-		//	WTHROW(EX_INIT, "The '-rr_structs_mode simple' option currently requires that the '-use_routing_node_demand' option be used to specify a positive " << 
-		//	                 "demand for routing nodes");
-		//}
-	}
 }
 
 
@@ -430,6 +382,7 @@ void create_virtual_sources(Routing_Structs *routing_structs){
 	int num_nodes = routing_structs->get_num_rr_nodes();
 
 	t_rr_node &rr_node = routing_structs->rr_node;
+	t_rr_node_indices &rr_node_indices = routing_structs->rr_node_indices;
 
 	/* find and act on sink nodes */
 	for (int inode = 0; inode < num_nodes; inode++){
@@ -501,6 +454,15 @@ void create_virtual_sources(Routing_Structs *routing_structs){
 		/* insert new node into the rr_node structure */
 		//rr_node.push_back(new_node);
 		int new_node_index = (int)rr_node.size()-1;
+		if (new_node.get_xlow() != new_node.get_xhigh() || new_node.get_ylow() != new_node.get_yhigh())
+			WTHROW(EX_INIT, "Virtual SOURCE should have xlow == xhigh && ylow == yhigh!");
+
+		int &ind = rr_node_indices[new_node.get_rr_type()][new_node.get_xlow()][new_node.get_ylow()][SIDES[0]][ptc];
+		if (ind != UNDEFINED) {
+			WTHROW(EX_INIT, "rr_node_indices[virtual SOURCE] is not UNDEFINED!");
+		} else {
+			ind = new_node_index;
+		}
 
 		/* mark the sink node with the index of this new virtual source */
 		rr_node[inode].set_virtual_source_node_ind( new_node_index );		//using rr_node instead of sink_node reference because rr_node vector changed

@@ -13,7 +13,7 @@ the constituent functions are meant to be passed-in to a topological traversal f
 #include "wotan_util.h"
 #include "globals.h"
 
-#include "draw.h"
+//#include "draw.h"
 #include "analysis_main.h"
 
 
