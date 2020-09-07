@@ -135,15 +135,10 @@ void process_switches(Routing_Structs *routing_structs, pugi::xml_node parent, c
 
 		SwitchSubnode = get_single_child(Switch, "timing", loc_data, OPTIONAL);
 		if (SwitchSubnode) {
-			rr_switch.set_R(get_attribute(SwitchSubnode, "R", loc_data).as_float());
-			rr_switch.set_Cin(get_attribute(SwitchSubnode, "Cin", loc_data).as_float());
-			rr_switch.set_Cout(get_attribute(SwitchSubnode, "Cout", loc_data).as_float());
-			rr_switch.set_Tdel(get_attribute(SwitchSubnode, "Tdel", loc_data).as_float());
-		} else {
-			rr_switch.set_R(0);
-			rr_switch.set_Cin(0);
-			rr_switch.set_Cout(0);
-			rr_switch.set_Tdel(0);
+			rr_switch.set_R(get_attribute(SwitchSubnode, "R", loc_data, OPTIONAL).as_float());
+			rr_switch.set_Cin(get_attribute(SwitchSubnode, "Cin", loc_data, OPTIONAL).as_float());
+			rr_switch.set_Cout(get_attribute(SwitchSubnode, "Cout", loc_data, OPTIONAL).as_float());
+			rr_switch.set_Tdel(get_attribute(SwitchSubnode, "Tdel", loc_data, OPTIONAL).as_float());
 		}
 		SwitchSubnode = get_single_child(Switch, "sizing", loc_data);
 		rr_switch.set_mux_trans_size(get_attribute(SwitchSubnode, "mux_trans_size", loc_data).as_float());
