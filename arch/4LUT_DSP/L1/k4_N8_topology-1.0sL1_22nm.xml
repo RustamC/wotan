@@ -52,10 +52,12 @@
       <fill type="clb" priority="1"/>
       <!-- IOs go on the periphery of the FPGA, for consistency -->
       <perimeter type="io" priority="10"/>
+      <!-- Nothing in the corners-->
+      <corners type="EMPTY" priority="100"/>
       <!-- Place this multiplier block every 22 columns from (and including) the eights column -->
-      <col type="mult_36" priority="2" startx="2" repeatx="22"/>
+      <col type="mult_36" priority="2" startx="2" repeatx="22" starty="1"/>
       <!-- Place this memory block every 22 columns from (and including) the nineteenth column -->
-      <col type="memory" priority="2" startx="13" repeatx="22"/>
+      <col type="memory" priority="2" startx="13" repeatx="22" starty="1"/>
     </auto_layout>
   </layout>
   <!-- Physical descriptions end -->
@@ -78,6 +80,7 @@
       <Tdel num_inputs="4" delay="5.16e-11"/>
       <Tdel num_inputs="8" delay="5.84e-11"/>
     </switch>
+    <!--switch ipin_cblock resistance set to yeild for 4x minimum drive strength buffer-->
     <switch type="mux" name="ipin_cblock" R="3272.5" Cout="0." Cin="2e-15" Tdel="7.562e-11" mux_trans_size="1.2" buf_size="auto"/>
   </switchlist>
 
