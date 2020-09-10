@@ -13,7 +13,7 @@
 #include "wotan_types.h"
 #include "exception.h"
 #include "wotan_util.h"
-//#include "draw.h"
+#include "draw.h"
 #include "topological_traversal.h"
 #include "enumerate.h"
 #include "analysis_cutline.h"
@@ -361,7 +361,7 @@ static void analyze_fpga_architecture(User_Options *user_opts, Analysis_Settings
 		cout << "Absolute routability metric: " << 1.0/user_opts->demand_multiplier << endl;
 	}
 
-	//update_screen(routing_structs, arch_structs, user_opts);
+	update_screen(routing_structs, arch_structs, user_opts);
 }
 
 /* performs routability analysis on a simple one-source/one-sink graph */

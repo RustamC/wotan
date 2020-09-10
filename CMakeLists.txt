@@ -16,6 +16,18 @@ if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}" CACHE PATH "default install path" FORCE)
 endif ()
 
+#Allow the user to decide weather to compile the graphics library
+set(ENABLE_GRAPHICS "auto" CACHE STRING "Specify whether Wotan uses the graphics library")
+set_property(CACHE ENABLE_GRAPHICS PROPERTY STRINGS auto off on)
+
+#Handle graphics setup
+set(GRAPHICS_DEFINES "")
+
+if (ENABLE_GRAPHICS STREQUAL "off")
+    list(APPEND GRAPHICS_DEFINES "NO_GRAPHICS")
+    message(STATUS "Wotan: graphics disabled")
+endif()
+
 #
 # Build Configuration
 #
@@ -30,7 +42,8 @@ set(CMAKE_CXX_EXTENSIONS OFF) #No compiler specific extensions
 
 find_package(Threads REQUIRED)
 find_package(Freetype REQUIRED)
-find_package(X11 REQUIRED)
+find_package(Fontconfig REQUIRED)
+find_package(X11 COMPONENTS X11 Xft REQUIRED)
 
 #
 # Warning flags
@@ -52,7 +65,7 @@ if (NOT MSVC)
 
     if(WOTAN_DEBUG)
         set(WOTAN_WARN_FLAGS_TO_CHECK
-            "-O0"
+            "-O0 -g"
             ${WOTAN_WARN_FLAGS_TO_CHECK})
     endif()
 endif ()
@@ -84,33 +97,9 @@ file(GLOB_RECURSE LIB_SOURCES SRC/*/*.cxx SRC/*/*.cpp SRC/*/*/*/*.cpp)
 file(GLOB_RECURSE LIB_HEADERS SRC/*/*.h SRC/*/*.hpp SRC/*/*/*/*.hpp)
 files_to_dirs(LIB_HEADERS LIB_INCLUDE_DIRS)
 
-set(LIB_HEADERS_TMP ${LIB_HEADERS})
-set(LIB_SOURCES_TMP ${LIB_SOURCES})
-set(LIB_INCLUDE_DIRS_TMP ${LIB_INCLUDE_DIRS})
-
-set(LIB_HEADERS "")
-foreach (dir ${LIB_HEADERS_TMP})
-    string(FIND ${dir} "draw" out)
-    if (${out} EQUAL "-1")
-        set(LIB_HEADERS "${dir};${LIB_HEADERS}")
-    endif ()
-endforeach ()
-
-set(LIB_SOURCES "")
-foreach (dir ${LIB_SOURCES_TMP})
-    string(FIND ${dir} "draw" out)
-    if (${out} EQUAL "-1")
-        set(LIB_SOURCES "${dir};${LIB_SOURCES}")
-    endif ()
-endforeach ()
-
-set(LIB_INCLUDE_DIRS "")
-foreach (dir ${LIB_INCLUDE_DIRS_TMP})
-    string(FIND ${dir} "draw" out)
-    if (${out} EQUAL "-1")
-        set(LIB_INCLUDE_DIRS "${dir};${LIB_INCLUDE_DIRS}")
-    endif ()
-endforeach ()
+set(LIB_HEADERS ${LIB_HEADERS})
+set(LIB_SOURCES ${LIB_SOURCES})
+set(LIB_INCLUDE_DIRS ${LIB_INCLUDE_DIRS})
 
 message("LIB_HEADERS: ${LIB_HEADERS}")
 message("LIB_SOURCES: ${LIB_SOURCES}")
@@ -123,16 +112,16 @@ add_library(libwotan STATIC ${LIB_HEADERS} ${LIB_SOURCES})
 target_include_directories(libwotan PUBLIC ${LIB_INCLUDE_DIRS} PRIVATE ${FREETYPE_INCLUDE_DIRS})
 set_target_properties(libwotan PROPERTIES PREFIX "")
 
-target_link_libraries(libwotan PUBLIC libpugixml PRIVATE Threads::Threads PRIVATE Freetype::Freetype)
-target_compile_definitions(libwotan PUBLIC "NO_GRAPHICS" PUBLIC "EZXML_NOMMAP" PUBLIC "_POSIX_C_SOURCE" PUBLIC "__USE_FIXED_PROTOTYPES__")
+target_link_libraries(libwotan PUBLIC libpugixml PRIVATE Threads::Threads PRIVATE Fontconfig::Fontconfig PRIVATE Freetype::Freetype PRIVATE X11 PRIVATE Xft)
+target_compile_definitions(libwotan PUBLIC ${GRAPHICS_DEFINES} PUBLIC "EZXML_NOMMAP" PUBLIC "_POSIX_C_SOURCE" PUBLIC "__USE_FIXED_PROTOTYPES__")
 
 #
 # Create executable
 #
 add_executable(wotan ${EXEC_SOURCES})
 target_include_directories(wotan PUBLIC ${LIB_INCLUDE_DIRS} PRIVATE ${FREETYPE_INCLUDE_DIRS})
-target_link_libraries(wotan PUBLIC libwotan PRIVATE Threads::Threads PRIVATE Freetype::Freetype)
-target_compile_definitions(wotan PUBLIC "NO_GRAPHICS" PUBLIC "EZXML_NOMMAP" PUBLIC "_POSIX_C_SOURCE" PUBLIC "__USE_FIXED_PROTOTYPES__")
+target_link_libraries(wotan PUBLIC libwotan PRIVATE Threads::Threads PRIVATE Fontconfig::Fontconfig PRIVATE Freetype::Freetype PRIVATE X11 PRIVATE Xft)
+target_compile_definitions(wotan PUBLIC ${GRAPHICS_DEFINES} PUBLIC "EZXML_NOMMAP" PUBLIC "_POSIX_C_SOURCE" PUBLIC "__USE_FIXED_PROTOTYPES__")
 
 #
 # Install wotan

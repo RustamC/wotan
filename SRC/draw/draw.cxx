@@ -46,8 +46,7 @@ void init_draw_coords(float clb_width, Routing_Structs *routing_structs, Arch_St
 	int grid_size_x, grid_size_y;
 	arch_structs->get_grid_size(&grid_size_x, &grid_size_y);
 
-	t_chanwidth &chan_width_x = arch_structs->chanwidth_x;
-	t_chanwidth &chan_width_y = arch_structs->chanwidth_y;
+	t_chan_width &chan_width = arch_structs->chan_width;
 
 	/* allocate tile x/y structs */
 	draw_coords->alloc_tile_x_y(grid_size_x, grid_size_y);
@@ -67,7 +66,7 @@ void init_draw_coords(float clb_width, Routing_Structs *routing_structs, Arch_St
 	j = 0;
 	for (i = 0; i < grid_size_x-1; i++) {
 		draw_coords->tile_x[i] = (i * draw_coords->get_tile_width()) + j;
-		j += chan_width_y[2][2] + 1; /* N wires need N+1 units of space */
+		j += chan_width.y_list[2] + 1; /* N wires need N+1 units of space */
 	}
 	draw_coords->tile_x[grid_size_x - 1] = ((grid_size_x-1) * draw_coords->get_tile_width()) + j;
 
@@ -75,7 +74,7 @@ void init_draw_coords(float clb_width, Routing_Structs *routing_structs, Arch_St
 	j = 0;
 	for (i = 0; i < grid_size_y-1; ++i) {
 		draw_coords->tile_y[i] = (i * draw_coords->get_tile_width()) + j;
-		j += chan_width_x[2][2] + 1;
+		j += chan_width.x_list[2] + 1;
 	}
 	draw_coords->tile_y[grid_size_y-1] = ((grid_size_y-1) * draw_coords->get_tile_width()) + j;
 
@@ -127,7 +126,7 @@ static void handle_button_press(float x, float y, t_event_buttonPressed event_bu
 	relative_x = x - draw_coords->tile_x[ tile_x ];	//relative to tile starting point
 	relative_y = y - draw_coords->tile_y[ tile_y ];
 
-	int chan_width = f_arch_structs_ptr->chanwidth_x[tile_x][tile_y];	/* assuming channel width is the same everywhere */
+	int chan_width = f_arch_structs_ptr->chan_width.x_list[tile_x] ;	/* assuming channel width is the same everywhere */
 	float gap_size = tile_size - tile_width;
 	float wire_region_size = gap_size / (float)(chan_width+1);
 
@@ -141,7 +140,7 @@ static void handle_button_press(float x, float y, t_event_buttonPressed event_bu
 		/* click is in horizontal channel */
 		int wire_num = floor((relative_y - tile_width) / wire_region_size);
 		if (wire_num < chan_width){
-			int node_ind = f_routing_structs_ptr->rr_node_index[CHANX][tile_x][tile_y][wire_num];
+			int node_ind = get_rr_node_index(f_arch_structs_ptr, f_routing_structs_ptr->rr_node_indices, tile_x, tile_y, CHANX, wire_num, TOP);
 			double node_demand = f_routing_structs_ptr->rr_node[node_ind].get_demand(f_user_opts_ptr);
 
 			//cout << "x: " << tile_x << "  y: " << tile_y << "  wire num: " << wire_num << "  rr node: " << node_ind << endl; 
@@ -155,7 +154,7 @@ static void handle_button_press(float x, float y, t_event_buttonPressed event_bu
 		/* click is in vertical channel */
 		int wire_num = floor((relative_x - tile_width) / wire_region_size);
 		if (wire_num < chan_width){
-			int node_ind = f_routing_structs_ptr->rr_node_index[CHANY][tile_x][tile_y][wire_num];
+			int node_ind = get_rr_node_index(f_arch_structs_ptr, f_routing_structs_ptr->rr_node_indices, tile_x, tile_y, CHANY, wire_num, RIGHT);
 			double node_demand = f_routing_structs_ptr->rr_node[node_ind].get_demand(f_user_opts_ptr);
 
 			/* display demand */
@@ -389,7 +388,7 @@ static void draw_rr_chan(int node_ind, int track_index, t_color node_color, e_rr
 
 	/* assume tiles are the same dimension in x and y directions and channel widths are the same everywhere*/
 	float clb_width = draw_coords->get_tile_width();
-	int wires_in_chan = f_arch_structs_ptr->chanwidth_x[2][2];
+	int wires_in_chan = f_arch_structs_ptr->chan_width.x_list[2];
 	float tile_span = draw_coords->tile_x[2] - draw_coords->tile_x[1];
 	float channel_span = tile_span - clb_width;
 	float track_width = channel_span / (float)(wires_in_chan+1);

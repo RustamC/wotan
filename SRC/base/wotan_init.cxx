@@ -7,7 +7,7 @@
 #include "globals.h"
 #include "exception.h"
 #include "io.h"
-//#include "draw.h"
+#include "draw.h"
 #include "parse_rr_graph_file.h"
 
 using namespace std;
@@ -97,10 +97,10 @@ void wotan_init(int argc, char **argv, User_Options *user_opts, Arch_Structs *ar
 				max_block_pins = num_type_pins;
 			}
 		}
-		//init_draw_coords((float)max_block_pins, routing_structs, arch_structs);
-		//init_graphics("Wotan v0.1", WHITE);
+		init_draw_coords((float)max_block_pins, routing_structs, arch_structs);
+		init_graphics("Wotan v2", WHITE);
 
-		//update_screen(routing_structs, arch_structs, user_opts);
+		update_screen(routing_structs, arch_structs, user_opts);
 	}
 
 	return;
