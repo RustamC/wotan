@@ -506,8 +506,14 @@ void process_blocks(Arch_Structs *arch_structs, pugi::xml_node parent, const pug
 
 			while (pin) {
 				auto num = get_attribute(pin, "ptc", loc_data).as_uint();
-				class_inf.pinlist.push_back(num);
+                class_inf.pinlist.push_back(num);
 				ptd.pin_class[num] = classNum;
+                
+                auto is_global = get_attribute(pin, "is_global", loc_data, OPTIONAL).as_bool();
+                if (is_global == true) {
+                    ptd.is_global_pin[num] = is_global;
+                }
+                
 				pin = pin.next_sibling();
 			}
 
