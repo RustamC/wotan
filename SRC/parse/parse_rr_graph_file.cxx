@@ -412,14 +412,15 @@ void process_edges(Routing_Structs *routing_structs, pugi::xml_node parent, cons
 }
 
 /* count number ob block pins */
-static void get_block_num_pins(pugi::xml_node parent, const pugiutil::loc_data &loc_data,
-							int num_class, int &num_pins, int &num_drivers, int &num_receivers) {
-	num_pins = 0;
-	num_drivers = 0;
-	num_receivers = 0;
+static void init_block_pins(pugi::xml_node pin_class, const pugiutil::loc_data &loc_data,
+							int num_class, Physical_Type_Descriptor& ptd) {
+
+	int num_pins = 0;
+	int num_drivers = 0;
+	int num_receivers = 0;
 
 	for (int classNum = 0; classNum < num_class; classNum++) {
-		const char *typeInfo = get_attribute(parent, "type", loc_data).value();
+		const char *typeInfo = get_attribute(pin_class, "type", loc_data).value();
 		e_pin_type type;
 
 		if (strcmp(typeInfo, "OUTPUT") == 0) {
@@ -430,15 +431,30 @@ static void get_block_num_pins(pugi::xml_node parent, const pugiutil::loc_data &
 			type = OPEN;
 		}
 
-		int loc_pins = count_children(parent, "pin", loc_data, OPTIONAL);
+		int loc_pins = 0;
+		pugi::xml_node pin = get_first_child(pin_class, "pin", loc_data, REQUIRED);
 
-		num_pins += loc_pins;
+		while (pin) {
+			bool is_global = get_attribute(pin, "is_global", loc_data, OPTIONAL).as_bool();
+			if (is_global == false)	++loc_pins;
+			pin = pin.next_sibling();
+		}
+
 		if (type == DRIVER)
 			num_drivers += loc_pins;
 		else if (type == RECEIVER)
 			num_receivers += loc_pins;
-		parent = parent.next_sibling();
+
+		num_pins += count_children(pin_class, loc_data, REQUIRED);
+		pin_class = pin_class.next_sibling();
 	}
+
+	ptd.set_num_pins(num_pins);
+	ptd.set_num_drivers(num_drivers);
+	ptd.set_num_receivers(num_receivers);
+
+	ptd.pin_class.assign(num_pins, UNDEFINED);
+	ptd.is_global_pin.assign(num_pins, false);
 }
 
 /* Initialize blocks from the RR graph file. */
@@ -467,18 +483,7 @@ void process_blocks(Arch_Structs *arch_structs, pugi::xml_node parent, const pug
 		pin_class = get_first_child(Block, "pin_class", loc_data, OPTIONAL);
 		int num_class = count_children(Block, "pin_class", loc_data, OPTIONAL);
 
-		{
-			int num_pins = 0, num_drivers = 0, num_receivers = 0;
-			get_block_num_pins(pin_class, loc_data, num_class,
-							num_pins, num_drivers, num_receivers);
-
-			ptd.set_num_pins(num_pins);
-			ptd.set_num_drivers(num_drivers);
-			ptd.set_num_receivers(num_receivers);
-
-			ptd.pin_class.assign(num_pins, UNDEFINED);
-			ptd.is_global_pin.assign(num_pins, false);
-		}
+		init_block_pins(pin_class, loc_data, num_class, ptd);
 
 		pin_class = get_first_child(Block, "pin_class", loc_data, OPTIONAL);
 
@@ -506,14 +511,14 @@ void process_blocks(Arch_Structs *arch_structs, pugi::xml_node parent, const pug
 
 			while (pin) {
 				auto num = get_attribute(pin, "ptc", loc_data).as_uint();
-                class_inf.pinlist.push_back(num);
+				class_inf.pinlist.push_back(num);
 				ptd.pin_class[num] = classNum;
-                
-                auto is_global = get_attribute(pin, "is_global", loc_data, OPTIONAL).as_bool();
-                if (is_global == true) {
-                    ptd.is_global_pin[num] = is_global;
-                }
-                
+
+				bool is_global = get_attribute(pin, "is_global", loc_data, OPTIONAL).as_bool();
+				if (is_global == true) {
+					ptd.is_global_pin[num] = is_global;
+				}
+
 				pin = pin.next_sibling();
 			}
 
@@ -729,8 +734,8 @@ void process_rr_node_indices(Arch_Structs *arch_structs, Routing_Structs *routin
 
 	// Copy the SOURCE/SINK nodes to all offset positions for blocks with width > 1 and/or height > 1
 	// This ensures that look-ups on non-root locations will still find the correct SOURCE/SINK
-	for (size_t x = 0; x < arch_structs->get_grid_width(); x++) {
-		for (size_t y = 0; y < arch_structs->get_grid_height(); y++) {
+	for (int x = 0; x < arch_structs->get_grid_width(); x++) {
+		for (int y = 0; y < arch_structs->get_grid_height(); y++) {
 			int width_offset = arch_structs->grid[x][y].get_width_offset();
 			int height_offset = arch_structs->grid[x][y].get_height_offset();
 			if (width_offset != 0 || height_offset != 0) {
