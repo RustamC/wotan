@@ -251,10 +251,10 @@ private:
 	
 	short ptc_num;					/* pin-track-class number. allows lookups of which pin/track/etc an rr node represents */
 	short fan_in;					/* the fan-in to this node */
-	short num_out_edges;				/* number of edges emanating from this node */
+	short num_out_edges;			/* number of edges emanating from this node */
 
 	/* @TODO: move direction & side to union as in t_rr_node */
-	enum e_direction direction;			/* direction along which signals would travel on this node (if applicable) */
+	enum e_direction direction;		/* direction along which signals would travel on this node (if applicable) */
 	enum e_side side;				/* Valid only for IPINs/OPINs */
 
 public:
@@ -542,7 +542,7 @@ public:
 /* contains routing structures */
 class Routing_Structs{
 private:
-	int num_rr_nodes;
+
 public:
 
 	t_rr_node rr_node;				/* a 1-D array of rr nodes */
@@ -561,6 +561,7 @@ public:
 
 	/* get methods */
 	int get_num_rr_nodes() const;
+	int get_num_rr_switches() const;
 };
 
 

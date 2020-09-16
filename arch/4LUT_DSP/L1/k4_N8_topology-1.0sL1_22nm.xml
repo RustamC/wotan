@@ -59,6 +59,14 @@
       <!-- Place this memory block every 22 columns from (and including) the nineteenth column -->
       <col type="memory" priority="2" startx="13" repeatx="22" starty="1"/>
     </auto_layout>
+    <fixed_layout name="sha_23x23" width="23" height="23">
+      <!-- Place this general purpose logic block in any unspecified column -->
+      <fill type="clb" priority="1"/>
+      <!-- IOs go on the periphery of the FPGA, for consistency -->
+      <perimeter type="io" priority="10"/>
+      <!-- Nothing in the corners-->
+      <corners type="EMPTY" priority="100"/>
+    </fixed_layout>
   </layout>
   <!-- Physical descriptions end -->
 
@@ -82,6 +90,7 @@
     </switch>
     <!--switch ipin_cblock resistance set to yeild for 4x minimum drive strength buffer-->
     <switch type="mux" name="ipin_cblock" R="3272.5" Cout="0." Cin="2e-15" Tdel="7.562e-11" mux_trans_size="1.2" buf_size="auto"/>
+    <!--switch type="mux" name="ipin_cblock" R="0" Cout="0." Cin="2e-15" Tdel="7.562e-11" mux_trans_size="1.2" buf_size="auto"/-->
   </switchlist>
 
   <segmentlist>
@@ -180,7 +189,7 @@
         <clock name="clk" num_pins="1"/>
 
         <!-- Every input pin is driven by 15% of the tracks in a channel, every output pin is driven by 25% of the tracks in a channel -->
-        <fc in_type="frac" in_val="0.300000" out_type="frac" out_val="0.600000"></fc>
+        <fc in_type="frac" in_val="0.100000" out_type="frac" out_val="0.600000"></fc>
         <pinlocations pattern="spread"/>
 
         <!--pinlocations pattern="custom">

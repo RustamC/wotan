@@ -69,35 +69,46 @@ void parse_rr_graph_file(std::string rr_graph_file, Arch_Structs *arch_structs, 
 
 		/* Global routing uses a single longwire track */
 		int max_chan_width = (is_global_graph ? 1 : nodes_per_chan.max);
+		cout << "Max channel width: " << max_chan_width << endl;
 
 		/* Alloc rr nodes and count count nodes */
 		next_component = get_single_child(rr_graph, "rr_nodes", loc_data);
 
-		int num_rr_nodes = count_children(next_component, "node", loc_data);
+		int num_rr_nodes = count_children(next_component, "node", loc_data);	
 		routing_structs->alloc_and_create_rr_node(num_rr_nodes);
+		cout << "Number of rr nodes: " << num_rr_nodes << endl;
+
 		process_nodes(routing_structs, next_component, loc_data);
 
-		/* Loads edges, switches, and node look up tables*/
+		/* Load switches */
 		next_component = get_single_child(rr_graph, "switches", loc_data);
 
 		int numSwitches = count_children(next_component, "switch", loc_data);
 		routing_structs->alloc_and_create_rr_switch_inf(numSwitches);
+		cout << "Number of rr switches: " << numSwitches << endl;
 
 		process_switches(routing_structs, next_component, loc_data);
 
+		/* Load edges */
 		int wire_to_rr_ipin_switch = UNDEFINED;
 		next_component = get_single_child(rr_graph, "rr_edges", loc_data);
+
 		process_edges(routing_structs, next_component, loc_data, &wire_to_rr_ipin_switch, numSwitches);
 
+		/* Load block types */
 		next_component = get_single_child(rr_graph, "block_types", loc_data);
 		process_blocks(arch_structs, next_component, loc_data);
 
+		/* Load grid */
 		next_component = get_single_child(rr_graph, "grid", loc_data);
 		process_grid(arch_structs, next_component, loc_data);
 		arch_structs->set_fill_type();
 
+		/* Load rr node indicies */
+		int x_size, y_size;
+		arch_structs->get_grid_size(&x_size, &y_size);
+		routing_structs->alloc_and_create_rr_node_index(NUM_RR_TYPES, NUM_SIDES, x_size, y_size);
 		process_rr_node_indices(arch_structs, routing_structs);
-
 	} catch (XmlError &e) {
 		WTHROW(EX_INIT, rr_graph_file << ":" << e.line() << ": " << e.what() << endl);
 	}
@@ -279,7 +290,7 @@ void process_nodes(Routing_Structs *routing_structs, pugi::xml_node parent, cons
 		node.set_C(C);
 
 		//clear each node edge
-		//node.set_num_edges(0);
+		node.set_fan_in(0);
 
 		//  <metadata>
 		//	<meta name='grid_prefix' >CLBLL_L_</meta>
@@ -342,13 +353,12 @@ void process_edges(Routing_Structs *routing_structs, pugi::xml_node parent, cons
 	for (size_t inode = 0; inode < routing_structs->rr_node.size(); inode++) {
 		routing_structs->rr_node[inode].alloc_in_edges_and_switches(num_in_edges_for_node[inode]);
 		routing_structs->rr_node[inode].alloc_out_edges_and_switches(num_out_edges_for_node[inode]);
-
 		num_in_edges_for_node[inode] = 0;
 		num_out_edges_for_node[inode] = 0;
 	}
 
 	edges = get_first_child(parent, "edge", loc_data);
-	/*initialize a vector that keeps track of the number of wire to ipin switches
+	/* initialize a vector that keeps track of the number of wire to ipin switches
 	 * There should be only one wire to ipin switch. In case there are more, make sure to
 	 * store the most frequent switch */
 	std::vector<int> count_for_wire_to_ipin_switches;
@@ -588,37 +598,39 @@ void process_rr_node_indices(Arch_Structs *arch_structs, Routing_Structs *routin
 	/* Alloc the lookup table */
 	auto &indices = routing_structs->rr_node_indices;
 
-	indices.resize(NUM_RR_TYPES);
+	//indices.resize(NUM_RR_TYPES);
 
 	typedef struct max_ptc {
 		short chanx_max_ptc = 0;
 		short chany_max_ptc = 0;
 	} t_max_ptc;
 
+	const int grid_height = arch_structs->get_grid_height();
+	const int grid_width  = arch_structs->get_grid_width();
+
 	/*
 	 * Local multi-dimensional vector to hold max_ptc for every coordinate.
 	 * It has same height and width as CHANY and CHANX are inverted
 	 */
 	vector<vector<t_max_ptc> > coordinates_max_ptc; /* [x][y] */
-	size_t max_coord_size = std::max(arch_structs->get_grid_height(),
-									arch_structs->get_grid_width());
+	size_t max_coord_size = std::max(grid_height, grid_width);
 	coordinates_max_ptc.resize(max_coord_size, vector<t_max_ptc>(max_coord_size));
 
 	/* Alloc the lookup table */
 	for (e_rr_type rr_type : RR_TYPES) {
 		if (rr_type == CHANX) {
-			indices[rr_type].resize(arch_structs->get_grid_height());
-			for (size_t y = 0; y < arch_structs->get_grid_height(); ++y) {
-				indices[rr_type][y].resize(arch_structs->get_grid_width());
-				for (size_t x = 0; x < arch_structs->get_grid_width(); ++x) {
+			indices[rr_type].resize(grid_height);
+			for (int y = 0; y < grid_height; ++y) {
+				indices[rr_type][y].resize(grid_width);
+				for (int x = 0; x < grid_width; ++x) {
 					indices[rr_type][y][x].resize(NUM_SIDES);
 				}
 			}
 		} else {
-			indices[rr_type].resize(arch_structs->get_grid_width());
-			for (size_t x = 0; x < arch_structs->get_grid_width(); ++x) {
-				indices[rr_type][x].resize(arch_structs->get_grid_height());
-				for (size_t y = 0; y < arch_structs->get_grid_height(); ++y) {
+			indices[rr_type].resize(grid_width);
+			for (int x = 0; x < grid_width; ++x) {
+				indices[rr_type][x].resize(grid_height);
+				for (int y = 0; y < grid_height; ++y) {
 					indices[rr_type][x][y].resize(NUM_SIDES);
 				}
 			}
@@ -633,52 +645,52 @@ void process_rr_node_indices(Arch_Structs *arch_structs, Routing_Structs *routin
 	 *
 	 * Note that CHANX and CHANY 's x and y are swapped due to the chan and seg convention.
 	 */
-	for (size_t inode = 0; inode < routing_structs->get_num_rr_nodes(); inode++) {
+	for (int inode = 0; inode < routing_structs->get_num_rr_nodes(); inode++) {
 		auto &node = routing_structs->rr_node[inode];
-		if (node.get_rr_type() == SOURCE || node.get_rr_type() == SINK) {
+		const auto rr_type = node.get_rr_type();
+		const short ptc_num = node.get_ptc_num();
+
+		if (rr_type == SOURCE || rr_type == SINK) {
 			for (int ix = node.get_xlow(); ix <= node.get_xhigh(); ix++) {
 				for (int iy = node.get_ylow(); iy <= node.get_yhigh(); iy++) {
-					if (node.get_rr_type() == SOURCE) {
-						indices[SOURCE][ix][iy][0].push_back(inode);
-						indices[SINK][ix][iy][0].push_back(OPEN);
+					if (ptc_num >= (int)indices[SOURCE][ix][iy][0].size()) {
+						indices[SOURCE][ix][iy][0].resize(ptc_num + 1, OPEN);
+					}
+					if (ptc_num >= (int)indices[SINK][ix][iy][0].size()) {
+						indices[SINK][ix][iy][0].resize(ptc_num + 1, OPEN);
+					}
+					indices[rr_type][ix][iy][0][ptc_num] = inode;
+				}
+			}
+		} else if (rr_type == IPIN || rr_type == OPIN) {
+			const e_side side = node.get_side();
+
+			for (int ix = node.get_xlow(); ix <= node.get_xhigh(); ix++) {
+				for (int iy = node.get_ylow(); iy <= node.get_yhigh(); iy++) {
+					if (rr_type == OPIN) {
+						indices[OPIN][ix][iy][side].push_back(inode);
+						indices[IPIN][ix][iy][side].push_back(OPEN);
 					} else {
-						if (node.get_rr_type() != SINK) {
-							WTHROW(EX_INIT,
-								__FILE__ << __LINE__ << "Node's " << inode << " type " << node.get_rr_type_string()
-								<< " != SINK" << endl);
+						if (ptc_num >= (int)indices[OPIN][ix][iy][side].size()) {
+							indices[OPIN][ix][iy][side].resize(ptc_num + 1, OPEN);
 						}
-						indices[SINK][ix][iy][0].push_back(inode);
-						indices[SOURCE][ix][iy][0].push_back(OPEN);
+						if (ptc_num >= (int)indices[IPIN][ix][iy][side].size()) {
+							indices[IPIN][ix][iy][side].resize(ptc_num + 1, OPEN);
+						}
+						indices[rr_type][ix][iy][side][ptc_num] = inode;
 					}
 				}
 			}
-		} else if (node.get_rr_type() == IPIN || node.get_rr_type() == OPIN) {
+		} else if (rr_type == CHANX) {
 			for (int ix = node.get_xlow(); ix <= node.get_xhigh(); ix++) {
 				for (int iy = node.get_ylow(); iy <= node.get_yhigh(); iy++) {
-					if (node.get_rr_type() == OPIN) {
-						indices[OPIN][ix][iy][node.get_side()].push_back(inode);
-						indices[IPIN][ix][iy][node.get_side()].push_back(OPEN);
-					} else {
-						if (node.get_rr_type() != IPIN) {
-							WTHROW(EX_INIT,
-								__FILE__ << __LINE__ << "Node's " << inode << " type " << node.get_rr_type_string()
-								<< " != IPIN" << endl);
-						}
-						indices[IPIN][ix][iy][node.get_side()].push_back(inode);
-						indices[OPIN][ix][iy][node.get_side()].push_back(OPEN);
-					}
+					coordinates_max_ptc[iy][ix].chanx_max_ptc = std::max(coordinates_max_ptc[iy][ix].chanx_max_ptc, ptc_num);
 				}
 			}
-		} else if (node.get_rr_type() == CHANX) {
+		} else if (rr_type == CHANY) {
 			for (int ix = node.get_xlow(); ix <= node.get_xhigh(); ix++) {
 				for (int iy = node.get_ylow(); iy <= node.get_yhigh(); iy++) {
-					coordinates_max_ptc[iy][ix].chanx_max_ptc = std::max(coordinates_max_ptc[iy][ix].chanx_max_ptc, node.get_ptc_num());
-				}
-			}
-		} else if (node.get_rr_type() == CHANY) {
-			for (int ix = node.get_xlow(); ix <= node.get_xhigh(); ix++) {
-				for (int iy = node.get_ylow(); iy <= node.get_yhigh(); iy++) {
-					coordinates_max_ptc[ix][iy].chany_max_ptc = std::max(coordinates_max_ptc[ix][iy].chany_max_ptc, node.get_ptc_num());
+					coordinates_max_ptc[ix][iy].chany_max_ptc = std::max(coordinates_max_ptc[ix][iy].chany_max_ptc, ptc_num);
 				}
 			}
 		}
@@ -687,46 +699,46 @@ void process_rr_node_indices(Arch_Structs *arch_structs, Routing_Structs *routin
 	/* Alloc the lookup table */
 	for (e_rr_type rr_type : RR_TYPES) {
 		if (rr_type == CHANX) {
-			for (size_t y = 0; y < arch_structs->get_grid_height(); ++y) {
-				for (size_t x = 0; x < arch_structs->get_grid_width(); ++x) {
+			for (int y = 0; y < grid_height; ++y) {
+				for (int x = 0; x < grid_width; ++x) {
 					indices[CHANX][y][x][0].resize(coordinates_max_ptc[y][x].chanx_max_ptc + 1, OPEN);
 				}
 			}
 		} else if (rr_type == CHANY) {
-			for (size_t x = 0; x < arch_structs->get_grid_width(); ++x) {
-				for (size_t y = 0; y < arch_structs->get_grid_height(); ++y) {
+			for (int x = 0; x < grid_width; ++x) {
+				for (int y = 0; y < grid_height; ++y) {
 					indices[CHANY][x][y][0].resize(coordinates_max_ptc[x][y].chany_max_ptc + 1, OPEN);
 				}
 			}
 		}
 	}
 
-	int count;
+	int ptc_num;
 	/* CHANX and CHANY need to reevaluated with its ptc num as the correct index*/
-	for (size_t inode = 0; inode < routing_structs->get_num_rr_nodes(); inode++) {
+	for (int inode = 0; inode < routing_structs->get_num_rr_nodes(); inode++) {
 		auto &node = routing_structs->rr_node[inode];
 		if (node.get_rr_type() == CHANX) {
 			for (int iy = node.get_ylow(); iy <= node.get_yhigh(); iy++) {
 				for (int ix = node.get_xlow(); ix <= node.get_xhigh(); ix++) {
-					count = node.get_ptc_num();
-					if (count >= int(indices[CHANX][iy][ix][0].size())) {
-						WTHROW(EX_INIT, "Ptc index" << count << " for CHANX (" << ix << ", " << iy
+					ptc_num = node.get_ptc_num();
+					if (ptc_num >= int(indices[CHANX][iy][ix][0].size())) {
+						WTHROW(EX_INIT, "Ptc index" << ptc_num << " for CHANX (" << ix << ", " << iy
 								<< ") is out of bounds, size = " << indices[CHANX][iy][ix][0].size()
 								<< endl);
 					}
-					indices[CHANX][iy][ix][0][count] = inode;
+					indices[CHANX][iy][ix][0][ptc_num] = inode;
 				}
 			}
 		} else if (node.get_rr_type() == CHANY) {
 			for (int ix = node.get_xlow(); ix <= node.get_xhigh(); ix++) {
 				for (int iy = node.get_ylow(); iy <= node.get_yhigh(); iy++) {
-					count = node.get_ptc_num();
-					if (count >= int(indices[CHANY][ix][iy][0].size())) {
-						WTHROW(EX_INIT, "Ptc index" << count << " for CHANY (" << ix << ", " << iy
+					ptc_num = node.get_ptc_num();
+					if (ptc_num >= int(indices[CHANY][ix][iy][0].size())) {
+						WTHROW(EX_INIT, "Ptc index" << ptc_num << " for CHANY (" << ix << ", " << iy
 								<< ") is out of bounds, size = " << indices[CHANY][ix][iy][0].size()
 								<< endl);
 					}
-					indices[CHANY][ix][iy][0][count] = inode;
+					indices[CHANY][ix][iy][0][ptc_num] = inode;
 				}
 			}
 		}
@@ -734,16 +746,16 @@ void process_rr_node_indices(Arch_Structs *arch_structs, Routing_Structs *routin
 
 	// Copy the SOURCE/SINK nodes to all offset positions for blocks with width > 1 and/or height > 1
 	// This ensures that look-ups on non-root locations will still find the correct SOURCE/SINK
-	for (int x = 0; x < arch_structs->get_grid_width(); x++) {
-		for (int y = 0; y < arch_structs->get_grid_height(); y++) {
+	for (int x = 0; x < grid_width; x++) {
+		for (int y = 0; y < grid_height; y++) {
 			int width_offset = arch_structs->grid[x][y].get_width_offset();
 			int height_offset = arch_structs->grid[x][y].get_height_offset();
 			if (width_offset != 0 || height_offset != 0) {
 				int root_x = x - width_offset;
 				int root_y = y - height_offset;
 
-				indices[SOURCE][x][y] = indices[SOURCE][root_x][root_y];
-				indices[SINK][x][y] = indices[SINK][root_x][root_y];
+				indices[SOURCE][x][y][0] = indices[SOURCE][root_x][root_y][0];
+				indices[SINK][x][y][0] = indices[SINK][root_x][root_y][0];
 			}
 		}
 	}

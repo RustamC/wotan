@@ -556,7 +556,7 @@ void RR_Node::alloc_in_edges_and_switches(short n_edges){
 	} else {
 		this->in_edges = NULL;
 		this->in_switches = NULL;
-		this->num_in_edges = UNDEFINED;
+		this->num_in_edges = (n_edges == 0) ? 0 : UNDEFINED;
 	}
 }
 
@@ -1253,6 +1253,12 @@ int Routing_Structs::get_num_rr_nodes() const{
 	return (int)this->rr_node.size();
 	//return this->num_rr_nodes;
 }
+
+/* returns number of switches */
+int Routing_Structs::get_num_rr_switches() const{
+	return (int)this->rr_switch_inf.size();
+}
+
 /*==== END Routing_Structs Class ====*/
 
 
