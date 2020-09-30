@@ -35,9 +35,9 @@ void process_rr_node_indices(Arch_Structs *arch_structs, Routing_Structs *routin
 
 /**** Function Definitions ****/
 /* Parses the specified rr structs file according the specified rr structs mode */
-void parse_rr_graph_file(std::string rr_graph_file, Arch_Structs *arch_structs, Routing_Structs *routing_structs) {
+void parse_rr_graph_file( std::string rr_graph_file, Arch_Structs *arch_structs, Routing_Structs *routing_structs, e_rr_graph_mode rr_graph_mode ) {
 
-	cout << "Parsing xml file (" << rr_graph_file << ")" << endl;
+	cout << "Parsing xml file (" << rr_graph_file << ") in mode " << GRAPH_MODE_STRING[rr_graph_mode] << endl;
 
 	const char *Prop;
 
@@ -55,60 +55,84 @@ void parse_rr_graph_file(std::string rr_graph_file, Arch_Structs *arch_structs, 
 
 		auto rr_graph = get_single_child(doc, "rr_graph", loc_data);
 
-		t_chan_width nodes_per_chan;
-		next_component = get_first_child(rr_graph, "channels", loc_data);
-		process_channels(nodes_per_chan, next_component, loc_data);
+		if (rr_graph_mode == RR_GRAPH_SIMPLE) {
+			/* Alloc rr nodes and count count nodes */
+			int num_rr_nodes = count_children(next_component, "node", loc_data);
+			routing_structs->alloc_and_create_rr_node(num_rr_nodes);
+			cout << "Number of rr nodes: " << num_rr_nodes << endl;
 
-		arch_structs->chan_width = nodes_per_chan;
+			process_nodes(routing_structs, next_component, loc_data);
 
-		/* Decode the graph_type */
-		//t_graph_type graph_type = GRAPH_BIDIR;
+			/* Load switches */
+			next_component = get_single_child(rr_graph, "switches", loc_data);
 
-		//bool is_global_graph = (GRAPH_GLOBAL == graph_type ? true : false);
-		bool is_global_graph = false;
+			int numSwitches = count_children(next_component, "switch", loc_data);
+			routing_structs->alloc_and_create_rr_switch_inf(numSwitches);
+			cout << "Number of rr switches: " << numSwitches << endl;
 
-		/* Global routing uses a single longwire track */
-		int max_chan_width = (is_global_graph ? 1 : nodes_per_chan.max);
-		cout << "Max channel width: " << max_chan_width << endl;
+			process_switches(routing_structs, next_component, loc_data);
 
-		/* Alloc rr nodes and count count nodes */
-		next_component = get_single_child(rr_graph, "rr_nodes", loc_data);
+			/* Load edges */
+			int wire_to_rr_ipin_switch = UNDEFINED;
+			next_component = get_single_child(rr_graph, "rr_edges", loc_data);
 
-		int num_rr_nodes = count_children(next_component, "node", loc_data);	
-		routing_structs->alloc_and_create_rr_node(num_rr_nodes);
-		cout << "Number of rr nodes: " << num_rr_nodes << endl;
+			process_edges(routing_structs, next_component, loc_data, &wire_to_rr_ipin_switch, numSwitches);
+		} else {
+			t_chan_width nodes_per_chan;
+			next_component = get_first_child(rr_graph, "channels", loc_data);
+			process_channels(nodes_per_chan, next_component, loc_data);
 
-		process_nodes(routing_structs, next_component, loc_data);
+			arch_structs->chan_width = nodes_per_chan;
 
-		/* Load switches */
-		next_component = get_single_child(rr_graph, "switches", loc_data);
+			/* Decode the graph_type */
+			//t_graph_type graph_type = GRAPH_BIDIR;
 
-		int numSwitches = count_children(next_component, "switch", loc_data);
-		routing_structs->alloc_and_create_rr_switch_inf(numSwitches);
-		cout << "Number of rr switches: " << numSwitches << endl;
+			//bool is_global_graph = (GRAPH_GLOBAL == graph_type ? true : false);
+			bool is_global_graph = false;
 
-		process_switches(routing_structs, next_component, loc_data);
+			/* Global routing uses a single longwire track */
+			int max_chan_width = (is_global_graph ? 1 : nodes_per_chan.max);
+			cout << "Max channel width: " << max_chan_width << endl;
 
-		/* Load edges */
-		int wire_to_rr_ipin_switch = UNDEFINED;
-		next_component = get_single_child(rr_graph, "rr_edges", loc_data);
+			/* Alloc rr nodes and count count nodes */
+			next_component = get_single_child(rr_graph, "rr_nodes", loc_data);
 
-		process_edges(routing_structs, next_component, loc_data, &wire_to_rr_ipin_switch, numSwitches);
+			int num_rr_nodes = count_children(next_component, "node", loc_data);
+			routing_structs->alloc_and_create_rr_node(num_rr_nodes);
+			cout << "Number of rr nodes: " << num_rr_nodes << endl;
 
-		/* Load block types */
-		next_component = get_single_child(rr_graph, "block_types", loc_data);
-		process_blocks(arch_structs, next_component, loc_data);
+			process_nodes(routing_structs, next_component, loc_data);
 
-		/* Load grid */
-		next_component = get_single_child(rr_graph, "grid", loc_data);
-		process_grid(arch_structs, next_component, loc_data);
-		arch_structs->set_fill_type();
+			/* Load switches */
+			next_component = get_single_child(rr_graph, "switches", loc_data);
 
-		/* Load rr node indicies */
-		int x_size, y_size;
-		arch_structs->get_grid_size(&x_size, &y_size);
-		routing_structs->alloc_and_create_rr_node_index(NUM_RR_TYPES, NUM_SIDES, x_size, y_size);
-		process_rr_node_indices(arch_structs, routing_structs);
+			int numSwitches = count_children(next_component, "switch", loc_data);
+			routing_structs->alloc_and_create_rr_switch_inf(numSwitches);
+			cout << "Number of rr switches: " << numSwitches << endl;
+
+			process_switches(routing_structs, next_component, loc_data);
+
+			/* Load edges */
+			int wire_to_rr_ipin_switch = UNDEFINED;
+			next_component = get_single_child(rr_graph, "rr_edges", loc_data);
+
+			process_edges(routing_structs, next_component, loc_data, &wire_to_rr_ipin_switch, numSwitches);
+
+			/* Load block types */
+			next_component = get_single_child(rr_graph, "block_types", loc_data);
+			process_blocks(arch_structs, next_component, loc_data);
+
+			/* Load grid */
+			next_component = get_single_child(rr_graph, "grid", loc_data);
+			process_grid(arch_structs, next_component, loc_data);
+			arch_structs->set_fill_type();
+
+			/* Load rr node indicies */
+			int x_size, y_size;
+			arch_structs->get_grid_size(&x_size, &y_size);
+			routing_structs->alloc_and_create_rr_node_index(NUM_RR_TYPES, NUM_SIDES, x_size, y_size);
+			process_rr_node_indices(arch_structs, routing_structs);
+		}
 	} catch (XmlError &e) {
 		WTHROW(EX_INIT, rr_graph_file << ":" << e.line() << ": " << e.what() << endl);
 	}

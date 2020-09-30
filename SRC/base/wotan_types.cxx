@@ -136,6 +136,7 @@ int get_rr_node_index(Arch_Structs *arch_structs,
 /*==== User Options Class ====*/
 User_Options::User_Options(){
 	this->nodisp = false;
+	this->rr_graph_mode = RR_GRAPH_UNDEFINED;
 	this->num_threads = 1;
 	this->max_connection_length = 3;
 	this->analyze_core = true;

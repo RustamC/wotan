@@ -70,6 +70,25 @@ enum e_traversal_dir{
 	BACKWARD_TRAVERSAL
 };
 
+
+/* specifies what form the contents of the rr structs file (parsed in during initialization) are expected to take
+	RR_GRAPH_VPR -- dumped routing resource structs from VPR. Should include lists of:
+			- rr nodes
+			- rr switches
+			- physical block types
+			- grid entries
+			- rr edges
+	RR_GRAPH_SIMPLE -- indicates a simple one-source/one-sink graph. Should include lists of:
+			- rr nodes
+*/
+enum e_rr_graph_mode{
+	RR_GRAPH_UNDEFINED = 0,
+	RR_GRAPH_VPR,
+	RR_GRAPH_SIMPLE,
+	NUM_RR_GRAPH_MODES
+};
+constexpr std::array<const char *, NUM_RR_GRAPH_MODES> GRAPH_MODE_STRING = {{"RR_GRAPH_UNDEFINED", "RR_GRAPH_VPR", "RR_GRAPH_SIMPLE"}};
+
 /* how do node buckets store path counts? does each
    bucket index correspond to a certain path weight?
    or does each bucket index correspond to #hops from source/sink? */
@@ -175,13 +194,14 @@ int get_rr_node_index(Arch_Structs *arch_structs,
 /* Contains user-defined options */
 class User_Options{
 public:
-	bool nodisp;				/* specifies whether to do graphics or not */
-	std::string rr_graph_file;		/* path to file from which rr graph is to be read */
-	int max_connection_length;		/* maximum connection length to be considered during path enumeration */
-	bool analyze_core;			/* reachability analysis will only be performed for a core region of the FPGA */ //TODO: defined as what?
+	bool nodisp;						/* specifies whether to do graphics or not */
+	e_rr_graph_mode rr_graph_mode;	/* Wotan's routing graph are read-in according to this mode */
+	std::string rr_graph_file;			/* path to file from which rr graph is to be read */
+	int max_connection_length;			/* maximum connection length to be considered during path enumeration */
+	bool analyze_core;					/* reachability analysis will only be performed for a core region of the FPGA */ //TODO: defined as what?
 
 	float use_routing_node_demand;		/* if not UNDEFINED, then demand for routing nodes (CHANX/CHANY) will be considered to be whatever is specified here.
-						   demand for all non-routing nodes will be considered to be 0 */
+											demand for all non-routing nodes will be considered to be 0 */
 
 	int num_threads;			/* number of threads to use for path enumeration & probability analysis */
 

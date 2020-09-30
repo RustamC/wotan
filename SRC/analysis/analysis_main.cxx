@@ -313,8 +313,16 @@ static float analyze_lowest_probs_pqs( vector< t_lowest_probs_pq > &lowest_probs
 void run_analysis(User_Options *user_opts, Analysis_Settings *analysis_settings, Arch_Structs *arch_structs, 
 			Routing_Structs *routing_structs){
 
-	analyze_fpga_architecture(user_opts, analysis_settings, arch_structs, routing_structs);
-	//analyze_simple_graph(user_opts, analysis_settings, arch_structs, routing_structs);
+	switch ( user_opts->rr_graph_mode ){
+		case RR_GRAPH_VPR:
+			analyze_fpga_architecture(user_opts, analysis_settings, arch_structs, routing_structs);
+			break;
+		case RR_GRAPH_SIMPLE:
+			analyze_simple_graph(user_opts, analysis_settings, arch_structs, routing_structs);
+			break;
+		default:
+			WTHROW(EX_PATH_ENUM, "Encountered unrecognized rr_graph_mode: " << user_opts->rr_graph_mode);
+	}
 }
 
 /* performs routability analysis on an FPGA architecture */
@@ -859,7 +867,7 @@ static void get_corresponding_sink_ids(User_Options *user_opts, Analysis_Setting
 						}
 
 						/* get node corresponding to this sink */	
-						vector<int> sink_node_inds = get_rr_node_indices(arch_structs, routing_structs->rr_node_indices,
+						int sink_node_ind = get_rr_node_index(arch_structs, routing_structs->rr_node_indices,
 													dest_x, dest_y, SINK, iclass);
 
 						//XXX
@@ -869,8 +877,7 @@ static void get_corresponding_sink_ids(User_Options *user_opts, Analysis_Setting
 							continue;
 						}
 
-						//sink_indices.push_back( sink_node_ind );
-						sink_indices.insert(sink_indices.end(), sink_node_inds.begin(), sink_node_inds.end());
+						sink_indices.push_back( sink_node_ind );
 						ss_length.push_back( ilen );
 
 						//XXX
