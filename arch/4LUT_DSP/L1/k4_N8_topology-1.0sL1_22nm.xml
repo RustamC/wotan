@@ -49,17 +49,19 @@
   <layout>
     <auto_layout aspect_ratio="1.0">
       <!-- Place this general purpose logic block in any unspecified column -->
-      <fill type="clb" priority="1"/>
+      <fill type="clb" priority="10"/>
       <!-- IOs go on the periphery of the FPGA, for consistency -->
-      <perimeter type="io" priority="10"/>
+      <perimeter type="io" priority="100"/>
       <!-- Nothing in the corners-->
-      <corners type="EMPTY" priority="100"/>
+      <corners type="EMPTY" priority="101"/>
       <!-- Place this multiplier block every 22 columns from (and including) the eights column -->
-      <col type="mult_36" priority="2" startx="2" repeatx="22" starty="1"/>
+      <!--col type="mult_36" priority="20" startx="2" repeatx="22" starty="1"/-->
+      <!--col type="EMPTY" priority="19" startx="2" repeatx="22" starty="1"/-->
       <!-- Place this memory block every 22 columns from (and including) the nineteenth column -->
-      <col type="memory" priority="2" startx="13" repeatx="22" starty="1"/>
+      <!--col type="memory" priority="20" startx="13" repeatx="22" starty="1"/-->
+      <!--col type="EMPTY" priority="19" startx="13" repeatx="22" starty="1"/-->
     </auto_layout>
-    <fixed_layout name="sha_23x23" width="23" height="23">
+    <fixed_layout name="wotan_fixed_layout" width="32" height="32">
       <!-- Place this general purpose logic block in any unspecified column -->
       <fill type="clb" priority="1"/>
       <!-- IOs go on the periphery of the FPGA, for consistency -->
@@ -84,12 +86,14 @@
   <!-- FPGA Device description ends -->
 
   <switchlist>
-    <switch type="mux" name="l1s_mux" R="1293" Cin="2e-15" Cout="0.000000e+00" mux_trans_size="1.5" buf_size="11.7000000">
+    <switch type="mux" name="l1s_mux" R="1293" Cin="2e-15" Cout="0.000000e+00" mux_trans_size="1.5"
+            buf_size="11.7000000">
       <Tdel num_inputs="4" delay="5.16e-11"/>
       <Tdel num_inputs="8" delay="5.84e-11"/>
     </switch>
     <!--switch ipin_cblock resistance set to yeild for 4x minimum drive strength buffer-->
-    <switch type="mux" name="ipin_cblock" R="3272.5" Cout="0." Cin="2e-15" Tdel="7.562e-11" mux_trans_size="1.2" buf_size="auto"/>
+    <switch type="mux" name="ipin_cblock" R="3272.5" Cout="0." Cin="2e-15" Tdel="7.562e-11" mux_trans_size="1.2"
+            buf_size="auto"/>
     <!--switch type="mux" name="ipin_cblock" R="0" Cout="0." Cin="2e-15" Tdel="7.562e-11" mux_trans_size="1.2" buf_size="auto"/-->
   </switchlist>
 
