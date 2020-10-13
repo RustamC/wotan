@@ -604,7 +604,7 @@ float analyze_test_tile_connections(User_Options *user_opts, Analysis_Settings *
 
 				//int sink_node_index = routing_structs->rr_node_indices[SOURCE][tile_coord.x][tile_coord.y][iclass];
 				int sink_node_index = get_rr_node_index(arch_structs, routing_structs->rr_node_indices, tile_coord.x,
-									tile_coord.y, SOURCE, iclass);
+									tile_coord.y, SINK, iclass);
 				int virtual_source_ind = routing_structs->rr_node[sink_node_index].get_virtual_source_node_ind();
 
 				if (virtual_source_ind != UNDEFINED){

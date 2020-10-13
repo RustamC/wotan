@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <algorithm>
+#include <unordered_map>
 #include "exception.h"
 #include "io.h"
 #include "wotan_types.h"
@@ -29,9 +30,13 @@ void process_nodes(Routing_Structs *routing_structs, pugi::xml_node parent, cons
 void process_edges(Routing_Structs *routing_structs, pugi::xml_node parent, const pugiutil::loc_data &loc_data,
 			int *wire_to_rr_ipin_switch, const int num_rr_switches);
 
-void process_channels(t_chan_width &chan_width, pugi::xml_node parent, const pugiutil::loc_data &loc_data);
+void process_channels(t_chan_width &chan_width, int grid_width, int grid_height, pugi::xml_node parent, const pugiutil::loc_data &loc_data);
 
 void process_rr_node_indices(Arch_Structs *arch_structs, Routing_Structs *routing_structs);
+
+bool verify_rr_node_indices(Arch_Structs *arch_structs, const t_rr_node_indices &rr_node_indices, const t_rr_node &rr_nodes);
+
+void get_grid_size(pugi::xml_node parent, const pugiutil::loc_data &loc_data, int &x_size, int &y_size);
 
 /**** Function Definitions ****/
 /* Parses the specified rr structs file according the specified rr structs mode */
@@ -78,9 +83,13 @@ void parse_rr_graph_file( std::string rr_graph_file, Arch_Structs *arch_structs,
 
 			process_edges(routing_structs, next_component, loc_data, &wire_to_rr_ipin_switch, numSwitches);
 		} else {
+			int grid_height, grid_width;
+			next_component = get_single_child(rr_graph, "grid", loc_data);
+			get_grid_size(next_component, loc_data, grid_width, grid_height);
+
 			t_chan_width nodes_per_chan;
 			next_component = get_first_child(rr_graph, "channels", loc_data);
-			process_channels(nodes_per_chan, next_component, loc_data);
+			process_channels(nodes_per_chan, grid_width, grid_height, next_component, loc_data);
 
 			arch_structs->chan_width = nodes_per_chan;
 
@@ -132,6 +141,10 @@ void parse_rr_graph_file( std::string rr_graph_file, Arch_Structs *arch_structs,
 			arch_structs->get_grid_size(&x_size, &y_size);
 			routing_structs->alloc_and_create_rr_node_index(NUM_RR_TYPES, NUM_SIDES, x_size, y_size);
 			process_rr_node_indices(arch_structs, routing_structs);
+
+			bool verified = verify_rr_node_indices(arch_structs, routing_structs->rr_node_indices, routing_structs->rr_node);
+			if (verified == false)
+				WTHROW(EX_INIT, rr_graph_file << ": Wrong rr_node_indices!");
 		}
 	} catch (XmlError &e) {
 		WTHROW(EX_INIT, rr_graph_file << ":" << e.line() << ": " << e.what() << endl);
@@ -166,7 +179,7 @@ void process_switches(Routing_Structs *routing_structs, pugi::xml_node parent, c
 		//}
 		//rr_switch.set_type(switch_type);
 		rr_switch.set_buffered(switch_type_str == "mux" || switch_type_str == "tristate"
-							   	|| switch_type_str == "buffer");
+								|| switch_type_str == "buffer");
 
 		SwitchSubnode = get_single_child(Switch, "timing", loc_data, OPTIONAL);
 		if (SwitchSubnode) {
@@ -184,7 +197,8 @@ void process_switches(Routing_Structs *routing_structs, pugi::xml_node parent, c
 }
 
 /* All channel info is read in and loaded into device_ctx.chan_width*/
-void process_channels(t_chan_width &chan_width, pugi::xml_node parent, const pugiutil::loc_data &loc_data) {
+void process_channels(t_chan_width &chan_width, int grid_width, int grid_height,
+					  pugi::xml_node parent, const pugiutil::loc_data &loc_data) {
 	pugi::xml_node channel, channelLists;
 
 	channel = get_first_child(parent, "channel", loc_data);
@@ -194,35 +208,36 @@ void process_channels(t_chan_width &chan_width, pugi::xml_node parent, const pug
 	chan_width.y_min = get_attribute(channel, "y_min", loc_data).as_uint();
 	chan_width.x_max = get_attribute(channel, "x_max", loc_data).as_uint();
 	chan_width.y_max = get_attribute(channel, "y_max", loc_data).as_uint();
-
-	std::vector<std::pair<int, int>> chL;
-
+	chan_width.x_list.resize(grid_height);
+	chan_width.y_list.resize(grid_width);
+        
 	channelLists = get_first_child(parent, "x_list", loc_data);
 	while (channelLists) {
 		size_t index = get_attribute(channelLists, "index", loc_data).as_uint();
-		int width = get_attribute(channelLists, "info", loc_data).as_float();
-		chL.push_back(std::pair<int, int>(index, width));
+		int info = get_attribute(channelLists, "info", loc_data).as_float();
+
+		if (index >= chan_width.x_list.size()) {
+			WTHROW(EX_INIT, "Index " << index
+				   << " on x list exceeds x_list size " << chan_width.x_list.size());
+		}
+		chan_width.x_list[index] = info;
 
 		channelLists = channelLists.next_sibling(channelLists.name());
 	}
 
-	std::sort(chL.begin(), chL.end());
-	std::transform(chL.begin(), chL.end(), std::back_inserter(chan_width.x_list),
-			[](const std::pair<int, int> &p) { return p.second; });
-
-	chL.clear();
 	channelLists = get_first_child(parent, "y_list", loc_data);
 	while (channelLists) {
 		size_t index = get_attribute(channelLists, "index", loc_data).as_uint();
-		int width = get_attribute(channelLists, "info", loc_data).as_float();
+		int info = get_attribute(channelLists, "info", loc_data).as_float();
 
-		chL.push_back(std::pair<int, int>(index, width));
+		if (index >= chan_width.y_list.size()) {
+			WTHROW(EX_INIT, "Index " << index
+				   << " on y list exceeds y_list size " << chan_width.y_list.size());
+		}
+		chan_width.y_list[index] = info;
+
 		channelLists = channelLists.next_sibling(channelLists.name());
 	}
-
-	std::sort(chL.begin(), chL.end());
-	std::transform(chL.begin(), chL.end(), std::back_inserter(chan_width.y_list),
-			[](const std::pair<int, int> &p) { return p.second; });
 }
 
 /* Node info are processed. Seg_id of nodes are processed separately when rr_index_data is allocated*/
@@ -565,31 +580,6 @@ void process_blocks(Arch_Structs *arch_structs, pugi::xml_node parent, const pug
 	}
 }
 
-/*  */
-void get_grid_size(pugi::xml_node parent, const pugiutil::loc_data &loc_data,
-				int &x_size, int &y_size) {
-	pugi::xml_node grid_node;
-
-	int num_grid_node = count_children(parent, "grid_loc", loc_data);
-	grid_node = get_first_child(parent, "grid_loc", loc_data);
-
-	int xmax = UNDEFINED, ymax = UNDEFINED;
-
-	for (int i = 0; i < num_grid_node; i++) {
-		int x = get_attribute(grid_node, "x", loc_data).as_float();
-		int y = get_attribute(grid_node, "y", loc_data).as_float();
-
-		if (xmax == UNDEFINED || xmax < x)
-			xmax = x;
-		if (ymax == UNDEFINED || ymax < y)
-			ymax = y;
-		grid_node = grid_node.next_sibling(grid_node.name());
-	}
-
-	x_size = xmax + 1;
-	y_size = ymax + 1;
-}
-
 /* Initialize grid from the routing graph file */
 void process_grid(Arch_Structs *arch_structs, pugi::xml_node parent, const pugiutil::loc_data &loc_data) {
 	pugi::xml_node grid_node;
@@ -621,8 +611,6 @@ void process_grid(Arch_Structs *arch_structs, pugi::xml_node parent, const pugiu
 void process_rr_node_indices(Arch_Structs *arch_structs, Routing_Structs *routing_structs) {
 	/* Alloc the lookup table */
 	auto &indices = routing_structs->rr_node_indices;
-
-	//indices.resize(NUM_RR_TYPES);
 
 	typedef struct max_ptc {
 		short chanx_max_ptc = 0;
@@ -691,18 +679,13 @@ void process_rr_node_indices(Arch_Structs *arch_structs, Routing_Structs *routin
 
 			for (int ix = node.get_xlow(); ix <= node.get_xhigh(); ix++) {
 				for (int iy = node.get_ylow(); iy <= node.get_yhigh(); iy++) {
-					if (rr_type == OPIN) {
-						indices[OPIN][ix][iy][side].push_back(inode);
-						indices[IPIN][ix][iy][side].push_back(OPEN);
-					} else {
-						if (ptc_num >= (int)indices[OPIN][ix][iy][side].size()) {
-							indices[OPIN][ix][iy][side].resize(ptc_num + 1, OPEN);
-						}
-						if (ptc_num >= (int)indices[IPIN][ix][iy][side].size()) {
-							indices[IPIN][ix][iy][side].resize(ptc_num + 1, OPEN);
-						}
-						indices[rr_type][ix][iy][side][ptc_num] = inode;
+					if (ptc_num >= (int)indices[OPIN][ix][iy][side].size()) {
+						indices[OPIN][ix][iy][side].resize(ptc_num + 1, OPEN);
 					}
+					if (ptc_num >= (int)indices[IPIN][ix][iy][side].size()) {
+						indices[IPIN][ix][iy][side].resize(ptc_num + 1, OPEN);
+					}
+					indices[rr_type][ix][iy][side][ptc_num] = inode;
 				}
 			}
 		} else if (rr_type == CHANX) {
@@ -787,7 +770,182 @@ void process_rr_node_indices(Arch_Structs *arch_structs, Routing_Structs *routin
 	routing_structs->rr_node_indices = indices;
 }
 
-/* If Wotan is being initialized based on an rr structs file then backwards edges/switches need to be determined 
+static std::string describe_rr_node(const t_rr_node &rr_nodes, int inode) {
+	std::ostringstream msgStream;
+	msgStream << "RR node: " << inode;
+
+	auto rr_node = rr_nodes[inode];
+
+	msgStream << " type: " << rr_node.get_rr_type_string();
+
+	msgStream << " location: (" << rr_node.get_xlow() << ", " << rr_node.get_ylow() << ")";
+
+	if (rr_node.get_xlow() != rr_node.get_xhigh() || rr_node.get_ylow() != rr_node.get_yhigh()) {
+		msgStream << " <-> (" << rr_node.get_xhigh() << ", " << rr_node.get_yhigh() << ")";
+	}
+
+	if (rr_node.get_rr_type() == CHANX || rr_node.get_rr_type() == CHANY) {
+		msgStream << " channel: " << rr_node.get_ptc_num();
+	} else if (rr_node.get_rr_type() == IPIN || rr_node.get_rr_type() == OPIN) {
+		msgStream << " pin: " << rr_node.get_ptc_num() << " side: " << rr_node.side_string();
+	} else {
+		if (!(rr_node.get_rr_type() == SOURCE || rr_node.get_rr_type() == SINK))
+                    WTHROW(EX_INIT, "ASSERT");
+
+		msgStream << " class: " << rr_node.get_ptc_num();
+	}
+
+	std::string msg = msgStream.str();
+	return msg;
+}
+
+bool verify_rr_node_indices(Arch_Structs *arch_structs, const t_rr_node_indices& rr_node_indices, const t_rr_node& rr_nodes) {
+	std::unordered_map<int, int> rr_node_counts;
+
+	for (e_rr_type rr_type : RR_TYPES) {
+		int width = arch_structs->get_grid_width();
+		int height = arch_structs->get_grid_height();
+
+		//CHANX bizarely stores with x/y swapped...
+		if (rr_type == CHANX) {
+			std::swap(width, height);
+		}
+
+		for (int x = 0; x < width; ++x) {
+			for (int y = 0; y < height; ++y) {
+				for (e_side side : SIDES) {
+					for (int inode : rr_node_indices[rr_type][x][y][side]) {
+						if (inode < 0) continue;
+
+						rr_node_counts[inode]++;
+
+						auto& rr_node = rr_nodes[inode];
+
+						if (rr_node.get_rr_type() != rr_type) {
+							WTHROW(EX_INIT, "RR node type does not match between rr_nodes and rr_node_indices (" << rr_node_typename[rr_node.get_rr_type()]
+									<< "/" << rr_node_typename[rr_type] << "): " << describe_rr_node(rr_nodes, inode).c_str());
+						}
+
+						if (rr_node.get_rr_type() == CHANX) {
+							//CHANX has this bizare swapped x / y storage...
+							std::swap(x, y);
+
+							if (rr_node.get_ylow() != rr_node.get_yhigh())
+								WTHROW(EX_INIT, "CHANX should be horizontal");
+
+							if (y != rr_node.get_ylow()) {
+								WTHROW(EX_INIT, "RR node y position does not agree between rr_nodes (" << rr_node.get_ylow()
+									   << ") and rr_node_indices (" << y << "): " << describe_rr_node(rr_nodes, inode).c_str());
+							}
+
+							if (x < rr_node.get_xlow() || x > rr_node.get_xhigh()) {
+								WTHROW(EX_INIT, "RR node x positions do not agree between rr_nodes (" << rr_node.get_xlow()
+									   << " <-> " << rr_node.get_xhigh() << ") and rr_node_indices (" << x << "): " <<
+										  describe_rr_node(rr_nodes, inode).c_str());
+							}
+
+							std::swap(x, y); //Swap back
+						} else if (rr_node.get_rr_type() == CHANY) {
+							if (rr_node.get_xlow() != rr_node.get_xhigh())
+								WTHROW(EX_INIT, "CHANY should be veritcal");
+
+							if (x != rr_node.get_xlow()) {
+								WTHROW(EX_INIT, "RR node x position does not agree between rr_nodes (" << rr_node.get_xlow() <<
+									   ") and rr_node_indices (" << x << "): " << describe_rr_node(rr_nodes, inode).c_str());
+							}
+
+							if (y < rr_node.get_ylow() || y > rr_node.get_yhigh()) {
+								WTHROW(EX_INIT, "RR node y positions do not agree between rr_nodes ("
+									   << rr_node.get_ylow() << " <-> " << rr_node.get_yhigh() << ") and rr_node_indices ("
+									   << y << "): " << describe_rr_node(rr_nodes, inode).c_str());
+							}
+						} else if (rr_node.get_rr_type() == SOURCE || rr_node.get_rr_type() == SINK) {
+							//Sources have co-ordintes covering the entire block they are in
+							if (x < rr_node.get_xlow() || x > rr_node.get_xhigh()) {
+								WTHROW(EX_INIT, "RR node x positions do not agree between rr_nodes (" << rr_node.get_xlow()
+									   << " <-> " << rr_node.get_xhigh() << ") and rr_node_indices (" << x << "): " <<
+										  describe_rr_node(rr_nodes, inode).c_str());
+							}
+
+							if (y < rr_node.get_ylow() || y > rr_node.get_yhigh()) {
+								WTHROW(EX_INIT, "RR node y positions do not agree between rr_nodes ("
+									   << rr_node.get_ylow() << " <-> " << rr_node.get_yhigh() << ") and rr_node_indices ("
+									   << y << "): " << describe_rr_node(rr_nodes, inode).c_str());
+							}
+
+						} else {
+							if (!(rr_node.get_rr_type() == IPIN || rr_node.get_rr_type() == OPIN))
+                                                            WTHROW(EX_INIT, "ASSERT");
+							/* As we allow a pin to be indexable on multiple sides,
+							 * This check code should be invalid
+								if (rr_node.get_xlow() != x) {
+									WTHROW(EX_INIT, "RR node xlow does not match between rr_nodes and rr_node_indices (" << rr_node.get_xlow() <<
+										   "/" << x << "): " << describe_rr_node(rr_nodes, inode).c_str());
+								}
+
+								if (rr_node.get_ylow() != y) {
+									WTHROW(EX_INIT, "RR node ylow does not match between rr_nodes and rr_node_indices (" << rr_node.get_ylow() <<
+										   "/)" << y << ": " << describe_rr_node(rr_nodes, inode).c_str());
+								}
+							*/
+						}
+
+						if (rr_type == IPIN || rr_type == OPIN) {
+							/* As we allow a pin to be indexable on multiple sides,
+							 * This check code should be invalid
+								if (rr_node.get_side() != side) {
+									WTHROW(EX_INIT, "RR node xlow does not match between rr_nodes and rr_node_indices (" << SIDE_STRING[rr_node.get_side()] <<
+										   "/" << SIDE_STRING[side] << "): " << describe_rr_node(rr_nodes, inode).c_str());
+								} else {
+									assert(rr_node.get_side() == side);
+								}
+							*/
+						} else { //Non-pin's don't have sides, and should only be in side 0
+							if (side != SIDES[0]) {
+								WTHROW(EX_INIT, "Non-Pin RR node in rr_node_indices found with non-default side" <<
+										  SIDE_STRING[side] << ": " << describe_rr_node(rr_nodes, inode).c_str());
+							} else {
+								if (side != 0)
+                                                                    WTHROW(EX_INIT, "ASSERT");
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if (rr_node_counts.size() != rr_nodes.size()) {
+		WTHROW(EX_INIT, "Mismatch in number of unique RR nodes in rr_nodes (" << rr_nodes.size() << ") and rr_node_indices (" << rr_node_counts.size() << ")");
+	}
+
+	for (auto kv : rr_node_counts) {
+		int inode = kv.first;
+		int count = kv.second;
+
+		auto& rr_node = rr_nodes[inode];
+
+		if (rr_node.get_rr_type() == SOURCE || rr_node.get_rr_type() == SINK) {
+			int rr_width = (rr_node.get_xhigh() - rr_node.get_xlow() + 1);
+			int rr_height = (rr_node.get_yhigh() - rr_node.get_ylow() + 1);
+			int rr_area = rr_width * rr_height;
+			if (count != rr_area) {
+				WTHROW(EX_INIT, "Mismatch between RR node size (" << rr_area << ") and count within rr_node_indices ("
+					   << count << "): " << describe_rr_node(rr_nodes, inode).c_str());
+			}
+		} else {
+			int length = std::max(rr_node.get_xhigh() - rr_node.get_xlow(), rr_node.get_yhigh() - rr_node.get_ylow());
+			if (count != length + 1) {
+				WTHROW(EX_INIT, "Mismatch between RR node length (" << length << ") and count within rr_node_indices ("
+					   << count << "), should be length + 1): " << describe_rr_node(rr_nodes, inode).c_str());
+			}
+		}
+	}
+
+	return true;
+}
+
+/* If Wotan is being initialized based on an rr structs file then backwards edges/switches need to be determined
    for each node as a post-processing step. Do this for the pins specified by 'node_type'. if node_type == UNDEFINED,
    then do this for all nodes  */
 void initialize_reverse_node_edges_and_switches(Routing_Structs *routing_structs, int node_type) {
@@ -844,3 +1002,26 @@ void initialize_reverse_node_edges_and_switches(Routing_Structs *routing_structs
 	}
 }
 
+/*  */
+void get_grid_size(pugi::xml_node parent, const pugiutil::loc_data &loc_data, int &x_size, int &y_size) {
+	pugi::xml_node grid_node;
+
+	int num_grid_node = count_children(parent, "grid_loc", loc_data);
+	grid_node = get_first_child(parent, "grid_loc", loc_data);
+
+	int xmax = UNDEFINED, ymax = UNDEFINED;
+
+	for (int i = 0; i < num_grid_node; i++) {
+		int x = get_attribute(grid_node, "x", loc_data).as_float();
+		int y = get_attribute(grid_node, "y", loc_data).as_float();
+
+		if (xmax == UNDEFINED || xmax < x)
+			xmax = x;
+		if (ymax == UNDEFINED || ymax < y)
+			ymax = y;
+		grid_node = grid_node.next_sibling(grid_node.name());
+	}
+
+	x_size = xmax + 1;
+	y_size = ymax + 1;
+}

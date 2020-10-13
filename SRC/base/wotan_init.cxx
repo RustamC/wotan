@@ -500,13 +500,6 @@ void create_virtual_sources(Routing_Structs *routing_structs){
 		if (new_node.get_xlow() != new_node.get_xhigh() || new_node.get_ylow() != new_node.get_yhigh())
 			WTHROW(EX_INIT, "Virtual SOURCE should have xlow == xhigh && ylow == yhigh!");
 
-		int &ind = rr_node_indices[new_node.get_rr_type()][new_node.get_xlow()][new_node.get_ylow()][SIDES[0]][ptc];
-		if (ind != UNDEFINED) {
-			WTHROW(EX_INIT, "rr_node_indices[virtual SOURCE] is not UNDEFINED!");
-		} else {
-			ind = new_node_index;
-		}
-
 		/* mark the sink node with the index of this new virtual source */
 		rr_node[inode].set_virtual_source_node_ind( new_node_index );		//using rr_node instead of sink_node reference because rr_node vector changed
 	}
