@@ -61,7 +61,7 @@
       <!--col type="memory" priority="20" startx="13" repeatx="22" starty="1"/-->
       <!--col type="EMPTY" priority="19" startx="13" repeatx="22" starty="1"/-->
     </auto_layout>
-    <fixed_layout name="wotan_fixed_layout" width="32" height="32">
+    <fixed_layout name="fixed" width="17" height="17">
       <!-- Place this general purpose logic block in any unspecified column -->
       <fill type="clb" priority="1"/>
       <!-- IOs go on the periphery of the FPGA, for consistency -->
@@ -119,7 +119,7 @@
         <func type="tr" formula="t"/>
         <func type="rb" formula="W-t-1"/>
       </switchfuncs>
-      <wireconn num_conns="from" from_type="l1s" to_type="l1s" from_switchpoint="0" to_switchpoint="0"/>
+      <wireconn num_conns="from" from_type="l1s" to_type="l1s" from_switchpoint="0" to_switchpoint="0" from_order="fixed" to_order="fixed"/>
     </switchblock>
 
     <switchblock name="subset_turn_perimeter" type="unidir">
@@ -134,7 +134,7 @@
         <func type="tr" formula="t"/>
         <func type="rb" formula="t"/>
       </switchfuncs>
-      <wireconn num_conns="from" from_type="l1s" to_type="l1s" from_switchpoint="0" to_switchpoint="0"/>
+      <wireconn num_conns="from" from_type="l1s" to_type="l1s" from_switchpoint="0" to_switchpoint="0" from_order="fixed" to_order="fixed"/>
     </switchblock>
 
     <switchblock name="subset_straight" type="unidir">
@@ -145,7 +145,7 @@
         <func type="rl" formula="t"/>
         <func type="tb" formula="t"/>
       </switchfuncs>
-      <wireconn num_conns="from" from_type="l1s" to_type="l1s" from_switchpoint="0" to_switchpoint="0"/>
+      <wireconn num_conns="from" from_type="l1s" to_type="l1s" from_switchpoint="0" to_switchpoint="0" from_order="fixed" to_order="fixed"/>
     </switchblock>
   </switchblocklist>
 
