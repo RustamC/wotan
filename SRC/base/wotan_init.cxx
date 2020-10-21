@@ -496,8 +496,6 @@ void create_virtual_sources(Routing_Structs *routing_structs){
 		/* insert new node into the rr_node structure */
 		//rr_node.push_back(new_node);
 		int new_node_index = (int)rr_node.size()-1;
-		if (new_node.get_xlow() != new_node.get_xhigh() || new_node.get_ylow() != new_node.get_yhigh())
-			WTHROW(EX_INIT, "Virtual SOURCE should have xlow == xhigh && ylow == yhigh!");
 
 		/* mark the sink node with the index of this new virtual source */
 		rr_node[inode].set_virtual_source_node_ind( new_node_index );		//using rr_node instead of sink_node reference because rr_node vector changed
