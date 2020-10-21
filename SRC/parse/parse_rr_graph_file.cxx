@@ -44,8 +44,6 @@ void parse_rr_graph_file( std::string rr_graph_file, Arch_Structs *arch_structs,
 
 	cout << "Parsing xml file (" << rr_graph_file << ") in mode " << GRAPH_MODE_STRING[rr_graph_mode] << endl;
 
-	const char *Prop;
-
 	pugi::xml_node next_component;
 
 	pugi::xml_document doc;
@@ -379,11 +377,6 @@ void process_edges(Routing_Structs *routing_structs, pugi::xml_node parent, cons
 
 		num_in_edges_for_node[sink_node]++;
 		num_out_edges_for_node[source_node]++;
-		/* @ATTENTION: in the original code each node has only one edges array.
-		 * And here at each iteration the duplicated edges were removed.
-		 * So the question is: should we also remove duplications from fanin arrays?
-		 */
-
 		edges = edges.next_sibling(edges.name());
 	}
 
@@ -594,13 +587,13 @@ void process_grid(Arch_Structs *arch_structs, pugi::xml_node parent, const pugiu
 		int x = get_attribute(grid_node, "x", loc_data).as_float();
 		int y = get_attribute(grid_node, "y", loc_data).as_float();
 
-		arch_structs->grid.at(x).at(y).set_type_index(
-				get_attribute(grid_node, "block_type_id", loc_data).as_int(0)
-		);
+		int block_type_id = get_attribute(grid_node, "block_type_id", loc_data).as_int(0);
+		arch_structs->grid.at(x).at(y).set_type_index(block_type_id);
 
-		arch_structs->grid.at(x).at(y).set_width_offset(get_attribute(grid_node, "width_offset", loc_data).as_float(0));
-		arch_structs->grid.at(x).at(y).set_height_offset(
-				get_attribute(grid_node, "height_offset", loc_data).as_float(0));
+		int width = get_attribute(grid_node, "width_offset", loc_data).as_int(0);
+		arch_structs->grid.at(x).at(y).set_width_offset(width);
+		int height = get_attribute(grid_node, "height_offset", loc_data).as_int(0);
+		arch_structs->grid.at(x).at(y).set_height_offset(height);
 
 		grid_node = grid_node.next_sibling(grid_node.name());
 	}
@@ -760,7 +753,7 @@ void process_rr_node_indices(Arch_Structs *arch_structs, Routing_Structs *routin
 			if (width_offset != 0 || height_offset != 0) {
 				int root_x = x - width_offset;
 				int root_y = y - height_offset;
-
+	
 				indices[SOURCE][x][y][0] = indices[SOURCE][root_x][root_y][0];
 				indices[SINK][x][y][0] = indices[SINK][root_x][root_y][0];
 			}

@@ -279,7 +279,8 @@ RR_Node_Base::RR_Node_Base(){
 	this->type = (e_rr_type)UNDEFINED;
 	this->xlow = UNDEFINED;
 	this->ylow = UNDEFINED;
-	this->span = UNDEFINED;
+	this->xhigh = UNDEFINED;
+	this->yhigh = UNDEFINED;
 	this->R = UNDEFINED;
 	this->C = UNDEFINED;
 	this->ptc_num = UNDEFINED;
@@ -296,7 +297,8 @@ RR_Node_Base::RR_Node_Base(const RR_Node_Base &obj){
 	this->type = obj.get_rr_type();
 	this->xlow = obj.get_xlow();
 	this->ylow = obj.get_ylow();
-	this->span = obj.get_span();
+	this->xhigh = obj.get_xhigh();
+	this->yhigh = obj.get_yhigh();
 	this->R = obj.get_R();
 	this->C = obj.get_C();
 	this->ptc_num = obj.get_ptc_num();
@@ -359,30 +361,20 @@ short RR_Node_Base::get_ylow() const{
 
 /* get the high x coordinate of this node */
 short RR_Node_Base::get_xhigh() const{
-	int xhigh;
-	if (this->type == CHANX){
-		xhigh = this->xlow + this->span-1;
-	} else {
-		xhigh = this->xlow;
-	}
-	return xhigh;
+	return this->xhigh;
 }
 
 /* get the high y coordinate of this node */
 short RR_Node_Base::get_yhigh() const{
-	int yhigh;
-	if (this->type == CHANY){
-		yhigh = this->ylow + this->span-1;
-	} else {
-		yhigh = this->ylow;
-	}
-	return yhigh;
+	return this->yhigh;
 }
 
 
 /* how many logic blocks does this node span? */
 short RR_Node_Base::get_span() const{
-	return this->span;
+	int xspan = abs(this->xhigh - this->xlow) + 1;
+	int yspan = abs(this->yhigh - this->ylow) + 1;
+	return max(xspan, yspan);
 }
 
 /* get node resistance */
@@ -439,15 +431,19 @@ void RR_Node_Base::set_coordinates(short x1, short y1, short x2, short y2){
 	/* set xlow */
 	if (x1 < x2){
 		this->xlow = x1;
+		this->xhigh = x2;
 	} else {
 		this->xlow = x2;
+		this->xhigh = x1;
 	}
 
 	/* set ylow */
 	if (y1 < y2){
 		this->ylow = y1;
+		this->yhigh = y2;
 	} else {
 		this->ylow = y2;
+		this->yhigh = y1;
 	}
 
 	/* set span */
@@ -458,8 +454,6 @@ void RR_Node_Base::set_coordinates(short x1, short y1, short x2, short y2){
 		/* a node that spans multiple CLBs in both the x and y directions?? */
 		WTHROW(EX_GRAPH, "Routing node of type " << this->get_rr_type_string() << " has both x and y spans greater than 1.");
 	}
-
-	this->span = max(xspan, yspan);
 }
 
 /* set node resistance */

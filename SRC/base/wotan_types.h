@@ -264,7 +264,8 @@ private:
 	/* allows getting start/end coordinates of nodes */
 	short xlow;					/* x coordinate of the low end of this routing resource */
 	short ylow;					/* y coordinate of the low end of this routing resource */
-	short span;					/* how many CLBs this node spans */
+	short xhigh;					/* x coordinate of the high end of this routing resource */
+	short yhigh;					/* y coordinate of the high end of this routing resource */
 
 	float R;					/* resistance (ohms) to go through this node (doesn't include switch resistances) */
 	float C;					/* total capacitance (farads) of this node (including switches that hang off from it) */

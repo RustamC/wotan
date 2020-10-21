@@ -425,7 +425,6 @@ void create_virtual_sources(Routing_Structs *routing_structs){
 	int num_nodes = routing_structs->get_num_rr_nodes();
 
 	t_rr_node &rr_node = routing_structs->rr_node;
-	t_rr_node_indices &rr_node_indices = routing_structs->rr_node_indices;
 
 	/* find and act on sink nodes */
 	for (int inode = 0; inode < num_nodes; inode++){

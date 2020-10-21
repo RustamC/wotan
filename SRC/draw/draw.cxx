@@ -103,7 +103,6 @@ static void handle_button_press(float x, float y, t_event_buttonPressed event_bu
 
 	int grid_size_x, grid_size_y;
 	f_arch_structs_ptr->get_grid_size(&grid_size_x, &grid_size_y);
-	t_grid &grid = f_arch_structs_ptr->grid;
 
 	t_draw_coords* draw_coords = &f_draw_coords;
 
