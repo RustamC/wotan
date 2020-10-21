@@ -375,20 +375,20 @@ static void check_setup( User_Options *user_opts, Arch_Structs *arch_structs, Ro
 		}
 	}
 
-	int fill_type_ind = arch_structs->get_fill_type_index();
-	for (int ix = 1; ix < grid_size_x-1; ix++){
-		for (int iy = 1; iy < grid_size_y-1; iy++){
-			int block_type_ind = arch_structs->grid[ix][iy].get_type_index();
-			//cout << "(" << ix << "," << iy << "): " << arch_structs->block_type[block_type_ind].get_name() << 
-			//	"  height " << arch_structs->grid[ix][iy].get_height_offset() << "  width " << arch_structs->grid[ix][iy].get_width_offset() << endl;
-			if (block_type_ind != fill_type_ind){
-				WTHROW(EX_INIT, "Except for I/O blocks on the perimeter of the FPGA, only logic blocks are allowed. " << endl <<
-						"Determined logic block type to be '" << arch_structs->block_type[fill_type_ind].get_name() << "'" << endl <<
-						"But found a block '" << arch_structs->block_type[block_type_ind].get_name() << "' in the interior of the FPGA" << endl <<
-						"Currently only a homogeneous set of blocks (with exception of peripheral I/O) is allowed" << endl);
-			}
-		}
-	}
+	//int fill_type_ind = arch_structs->get_fill_type_index();
+	//for (int ix = 1; ix < grid_size_x-1; ix++){
+	//	for (int iy = 1; iy < grid_size_y-1; iy++){
+	//		int block_type_ind = arch_structs->grid[ix][iy].get_type_index();
+	//		//cout << "(" << ix << "," << iy << "): " << arch_structs->block_type[block_type_ind].get_name() << 
+	//		//	"  height " << arch_structs->grid[ix][iy].get_height_offset() << "  width " << arch_structs->grid[ix][iy].get_width_offset() << endl;
+	//		if (block_type_ind != fill_type_ind){
+	//			WTHROW(EX_INIT, "Except for I/O blocks on the perimeter of the FPGA, only logic blocks are allowed. " << endl <<
+	//					"Determined logic block type to be '" << arch_structs->block_type[fill_type_ind].get_name() << "'" << endl <<
+	//					"But found a block '" << arch_structs->block_type[block_type_ind].get_name() << "' in the interior of the FPGA" << endl <<
+	//					"Currently only a homogeneous set of blocks (with exception of peripheral I/O) is allowed" << endl);
+	//		}
+	//	}
+	//}
 
 	/* check that the number of threads to be used during analysis is greater than 0 */
 	if (user_opts->num_threads <= 0){
