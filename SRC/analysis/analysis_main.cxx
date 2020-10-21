@@ -16,11 +16,7 @@
 #include "draw.h"
 #include "topological_traversal.h"
 #include "enumerate.h"
-#include "analysis_cutline.h"
-#include "analysis_cutline_recursive.h"
 #include "analysis_propagate.h"
-#include "analysis_cutline_simple.h"
-#include "analysis_reliability_poly.h"
 
 
 using namespace std;
@@ -1407,61 +1403,7 @@ float estimate_connection_probability(int source_node_ind, int sink_node_ind, An
 		   connection being routable. If any scaling to probabilities is desired, it should be done outside this
 		   function */
 
-		if ( PROBABILITY_MODE == CUTLINE ){
-			node_topo_inf[source_node_ind].set_level( 0 );
-
-			Cutline_Structs cutline_structs;
-			cutline_structs.fill_type = fill_type;
-			do_topological_traversal(source_node_ind, sink_node_ind, rr_node, ss_distances, node_topo_inf, FORWARD_TRAVERSAL,
-						max_path_weight, user_opts, (void*)&cutline_structs,
-						cutline_node_popped_func,
-						cutline_child_iterated_func,
-						cutline_traversal_done_func);
-
-			probability_sink_reachable = cutline_structs.prob_routable;
-
-		} else if ( PROBABILITY_MODE == CUTLINE_SIMPLE ){
-			set_node_hops(source_node_ind, sink_node_ind, rr_node, ss_distances, max_path_weight, FORWARD_TRAVERSAL);
-			set_node_hops(sink_node_ind, source_node_ind, rr_node, ss_distances, max_path_weight, BACKWARD_TRAVERSAL);
-
-			/* get hops from source to sink; size the cutline prob struct vector based on that */
-			int source_sink_hops = ss_distances[source_node_ind].get_sink_hops();	//hops from sink
-
-			Cutline_Simple_Structs cutline_simple_structs;
-			cutline_simple_structs.cutline_simple_prob_struct.assign(source_sink_hops-1, vector<int>());
-			cutline_simple_structs.fill_type = fill_type;
-			
-			do_topological_traversal(source_node_ind, sink_node_ind, rr_node, ss_distances, node_topo_inf, FORWARD_TRAVERSAL,
-						max_path_weight, user_opts, (void*)&cutline_simple_structs,
-						cutline_simple_node_popped_func,
-						cutline_simple_child_iterated_func,
-						cutline_simple_traversal_done_func);
-
-			probability_sink_reachable = cutline_simple_structs.prob_routable;
-
-		} else if ( PROBABILITY_MODE == CUTLINE_RECURSIVE ){
-			set_node_hops(source_node_ind, sink_node_ind, rr_node, ss_distances, max_path_weight, FORWARD_TRAVERSAL);
-			set_node_hops(sink_node_ind, source_node_ind, rr_node, ss_distances, max_path_weight, BACKWARD_TRAVERSAL);
-
-			Cutline_Recursive_Structs cutline_rec_structs;
-
-			int source_hops = ss_distances[sink_node_ind].get_source_hops();
-			cutline_rec_structs.bound_source_hops = source_hops;
-			cutline_rec_structs.recurse_level = 0;
-			cutline_rec_structs.cutline_rec_prob_struct.assign( source_hops, vector<int>() );
-			cutline_rec_structs.source_ind = source_node_ind;
-			cutline_rec_structs.sink_ind = sink_node_ind;
-			cutline_rec_structs.fill_type = fill_type;
-
-			do_topological_traversal(source_node_ind, sink_node_ind, rr_node, ss_distances, node_topo_inf, FORWARD_TRAVERSAL,
-						max_path_weight, user_opts, (void*)&cutline_rec_structs,
-						cutline_recursive_node_popped_func,
-						cutline_recursive_child_iterated_func,
-						cutline_recursive_traversal_done_func);
-
-			probability_sink_reachable = cutline_rec_structs.prob_routable;
-
-		} else if ( PROBABILITY_MODE == PROPAGATE ){
+		if ( PROBABILITY_MODE == PROPAGATE ){
 			node_topo_inf[source_node_ind].buckets.source_buckets[0] = 1;
 
 			Propagate_Structs propagate_structs;
@@ -1475,33 +1417,6 @@ float estimate_connection_probability(int source_node_ind, int sink_node_ind, An
 
 			probability_sink_reachable = propagate_structs.prob_routable;
 
-		} else if ( PROBABILITY_MODE == RELIABILITY_POLYNOMIAL ){
-			if (user_opts->use_routing_node_demand == UNDEFINED){
-				WTHROW(EX_PATH_ENUM, "Probability mode was set to RELIABILITY_POLYNOMIAL. But user_opts->use_routing_node_demand was not set!");
-			}
-
-			set_node_hops(source_node_ind, sink_node_ind, rr_node, ss_distances, max_path_weight, FORWARD_TRAVERSAL);
-			set_node_hops(sink_node_ind, source_node_ind, rr_node, ss_distances, max_path_weight, BACKWARD_TRAVERSAL);
-
-			/* enumerate paths from source */
-			/* note -- this increments node demands a second time. but since we will be ignoring node demands completely, this is fine */
-			Enumerate_Structs enumerate_structs;
-			enumerate_structs.mode = BY_PATH_HOPS;
-
-			node_topo_inf[source_node_ind].buckets.source_buckets[0] = 1;	//one path at bucket 0 -- gotta start with something
-			do_topological_traversal(source_node_ind, sink_node_ind, rr_node, ss_distances, node_topo_inf, FORWARD_TRAVERSAL,
-						max_path_weight, user_opts, (void*)&enumerate_structs,
-						enumerate_node_popped_func,
-						enumerate_child_iterated_func,
-						enumerate_traversal_done_func);
-
-			int source_sink_hops = ss_distances[sink_node_ind].get_source_hops();
-			Node_Buckets &sink_node_buckets = node_topo_inf[sink_node_ind].buckets;
-			double *source_buckets = sink_node_buckets.source_buckets;
-			int num_source_buckets = sink_node_buckets.get_num_source_buckets();
-
-			probability_sink_reachable = analyze_reliability_polynomial(source_sink_hops, source_buckets, num_source_buckets,
-									enumerate_structs.num_routing_nodes_in_subgraph, 1-user_opts->use_routing_node_demand);
 		} else {
 			WTHROW(EX_PATH_ENUM, "Unknown probability mode: " << PROBABILITY_MODE);
 		}
