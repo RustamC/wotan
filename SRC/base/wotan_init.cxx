@@ -76,11 +76,12 @@ void wotan_init(int argc, char **argv, User_Options *user_opts, Arch_Structs *ar
 		analysis_settings->alloc_and_set_test_tile_coords(arch_structs, routing_structs);
 
 		/* initialize path count history structures of rr nodes */
-		int fill_type_ind = arch_structs->get_fill_type_index();
-		if (user_opts->self_congestion_mode == MODE_RADIUS){
+		// TODO: fix this after fill_type_ind removed
+		//int fill_type_ind = arch_structs->get_fill_type_index();
+		//if (user_opts->self_congestion_mode == MODE_RADIUS){
 			//TODO: allocate this in analysis_main::alloc_self_congestion_structs
-			routing_structs->alloc_rr_node_path_histories( (int)arch_structs->block_type[fill_type_ind].class_inf.size() );
-		}
+		//	routing_structs->alloc_rr_node_path_histories( (int)arch_structs->block_type[fill_type_ind].class_inf.size() );
+		//}
 	}
 	/* initialize rr node weights */
 	routing_structs->init_rr_node_weights();
@@ -99,7 +100,7 @@ void wotan_init(int argc, char **argv, User_Options *user_opts, Arch_Structs *ar
 			}
 		}
 		init_draw_coords((float)max_block_pins, routing_structs, arch_structs);
-		init_graphics("Wotan v2", WHITE);
+		init_graphics("Wotan v0.2", WHITE);
 
 		update_screen(routing_structs, arch_structs, user_opts);
 	}

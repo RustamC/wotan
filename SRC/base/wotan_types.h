@@ -21,6 +21,17 @@
 
 
 /**** Enums ****/
+
+enum e_block_type {
+    EMPTY=0,		/* blocks without input/outputs */
+    IO,			/* blocks with width=height=1 && located on the perimeter */
+    CLB,		/* most frequent block with width=height=1 */
+    MACRO,		/* blocks with width>1 || height>1*/
+    NUM_BLOCK_TYPES
+};
+constexpr std::array<e_block_type, NUM_BLOCK_TYPES> BLOCK_TYPES = {{EMPTY, IO, CLB, MACRO}};
+constexpr std::array<const char *, NUM_BLOCK_TYPES> block_types_typename{{"EMPTY", "IO", "CLB", "MACRO"}};
+
 /* used to specify the direction of a routing node. INC/DEC represents
    in which way signals on the node are headed relative to the coordinate system */
 enum e_direction{
@@ -230,8 +241,8 @@ public:
 	/* A list of tile coordinates representing FPGA tiles from which path enumeration is to be performed */
 	std::vector< Coordinate > test_tile_coords;
 
-	/* Contains the probabilities of using each given pin belonging to the 'fill' block type (the block type can be
-	   determined from Arch_Structs::get_fill_type_index()). If a pin probability is 0, no paths will be enumerated from it */
+	/* Contains the probabilities of using each given pin belonging to the  block type. If a pin probability is 0, no paths will be enumerated from it */
+	std::array<t_prob_list, NUM_BLOCK_TYPES> ptd_pin_probabilities;
 	t_prob_list pin_probabilities;
 
 	/* 	Contains the probabilities of encountering connections of a given length. If a particular source/dest connection has a length
@@ -483,6 +494,8 @@ private:
 	
 	int num_drivers;				/* number of pins in this block that are drivers */
 	int num_receivers;				/* number of pins in this block that are receivers */
+	
+	e_block_type type;				/* type of this block (EMPTY/IO/CLB/MACRO) */
 public:
 
 	Physical_Type_Descriptor();
@@ -490,6 +503,8 @@ public:
 	std::vector<Pin_Class> class_inf;		/* contains info on each pin class of this block */
 	std::vector<int> pin_class;			/* Specifies which class each pin belongs to. Used to index into class_inf */
 	std::vector<bool> is_global_pin;		/* True if the corresponding pin is a global pin */
+	
+	t_prob_list pin_probabilities;
 	
 	/* get methods */
 	std::string get_name() const;
@@ -499,7 +514,8 @@ public:
 	int get_height() const;
 	int get_num_drivers() const;
 	int get_num_receivers() const;
-
+	e_block_type get_block_type() const;
+	
 	/* set methods */
 	void set_name(std::string);
 	void set_index(int);
@@ -508,6 +524,8 @@ public:
 	void set_height(int);
 	void set_num_drivers(int);
 	void set_num_receivers(int);
+	void set_block_type(e_block_type);
+	void set_pin_probabilities(double driver_prob, double receiver_prob);
 };
 
 
@@ -537,6 +555,8 @@ public:
 class Arch_Structs{
 private:
 	int fill_type_index;			/* the index, in t_block_type array, of the most common type of block (assumed to be the logic block) */
+	int perimeter_type_index;		/* the index, in t_block_type array, of the most common type of block on perimeter (assumed to be the IO) */
+	
 public:
 	Arch_Structs();
 
@@ -550,9 +570,12 @@ public:
 
 	/* set methods */
 	void set_fill_type();					/* sets 'fill_type_index' according to the most common block in 'grid' */
+	void set_perimeter_type();
+	void set_block_types();
 
 	/* get methods */
 	int get_fill_type_index() const;			/* returns 'fill_type_index' */
+	int get_perimeter_type_index() const;
 	void get_grid_size(int *x_size, int *y_size) const;	/* returns x and y sizes of the grid */
 	int get_num_block_types() const;			/* returns number of physical block types */
 	int get_grid_width() const;

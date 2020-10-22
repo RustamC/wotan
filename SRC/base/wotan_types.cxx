@@ -1,6 +1,7 @@
 
 #include <cmath>
 #include <cassert>
+#include <unordered_map>
 #include "io.h"
 #include "exception.h"
 #include "wotan_types.h"
@@ -182,34 +183,11 @@ Analysis_Settings::Analysis_Settings(){
 }
 
 /* sets probabilities of driver/receiver pins of the physical descriptor type that represents the logic block */
+// TODO: different prob for each type
 void Analysis_Settings::alloc_and_set_pin_probabilities(double driver_prob, double receiver_prob, Arch_Structs *arch_structs){
-	/* get fill block type (i.e. the logic block type) */
-	int fill_type_index = arch_structs->get_fill_type_index();
-	Physical_Type_Descriptor *fill_block_type = &arch_structs->block_type[fill_type_index];
-
-	/* get number of pins at this block type */
-	int num_block_pins = fill_block_type->get_num_pins();
-
-	/* allocate pin probabilities structure */
-	this->pin_probabilities.assign(num_block_pins, 0.0);
-
-	/* now set pin probabilities based on whether they are a driver or a receiver. global pins and
-	   all other pins receiver a probability of 0 */
-	for (int ipin = 0; ipin < num_block_pins; ipin++){
-		int pin_class = fill_block_type->pin_class[ipin];
-		e_pin_type pin_type = fill_block_type->class_inf[pin_class].get_pin_type();
-
-		if (fill_block_type->is_global_pin[ipin]){
-			this->pin_probabilities[ipin] = 0;
-		} else {
-			if (pin_type == DRIVER){
-				this->pin_probabilities[ipin] = driver_prob;
-			} else if (pin_type == RECEIVER){
-				this->pin_probabilities[ipin] = receiver_prob;
-			} else {
-				this->pin_probabilities[ipin] = 0;
-			}
-		} 
+	for (auto &ptd: arch_structs->block_type) {
+		ptd.set_pin_probabilities(driver_prob, receiver_prob);
+		this->ptd_pin_probabilities[(int)ptd.get_block_type()] = ptd.pin_probabilities;
 	}
 }
 
@@ -980,6 +958,7 @@ Physical_Type_Descriptor::Physical_Type_Descriptor(){
 	this->height = UNDEFINED;
 	this->num_drivers = UNDEFINED;
 	this->num_receivers = UNDEFINED;
+	this->type = NUM_BLOCK_TYPES;
 }
 
 /* returns the name of this block type */
@@ -1017,6 +996,11 @@ int Physical_Type_Descriptor::get_num_receivers() const{
 	return this->num_receivers;
 }
 
+/* returns the type of this block */
+e_block_type Physical_Type_Descriptor::get_block_type() const{
+	return this->type;
+}
+
 /* sets the name of this block type */
 void Physical_Type_Descriptor::set_name(std::string n){
 	this->name = n;
@@ -1050,6 +1034,38 @@ void Physical_Type_Descriptor::set_num_drivers(int num_d){
 /* sets the number of pins on this block type that are receivers */
 void Physical_Type_Descriptor::set_num_receivers(int num_r){
 	this->num_receivers = num_r;
+}
+
+/* sets the block type */
+void Physical_Type_Descriptor::set_block_type(e_block_type atype){
+	this->type = atype;
+}
+
+void Physical_Type_Descriptor::set_pin_probabilities(double driver_prob, double receiver_prob) {
+	/* get number of pins at this block type */
+	int num_block_pins = this->get_num_pins();
+	
+	/* allocate pin probabilities structure */
+	this->pin_probabilities.assign(num_block_pins, 0.0);
+	
+	/* now set pin probabilities based on whether they are a driver or a receiver. global pins and
+	   all other pins receiver a probability of 0 */
+	for (int ipin = 0; ipin < num_block_pins; ipin++){
+		int a_pin_class = this->pin_class[ipin];
+		e_pin_type pin_type = this->class_inf[a_pin_class].get_pin_type();
+
+		if (this->is_global_pin[ipin]){
+			this->pin_probabilities[ipin] = 0;
+		} else {
+			if (pin_type == DRIVER){
+				this->pin_probabilities[ipin] = driver_prob;
+			} else if (pin_type == RECEIVER){
+				this->pin_probabilities[ipin] = receiver_prob;
+			} else {
+				this->pin_probabilities[ipin] = 0;
+			}
+		} 
+	}
 }
 /*==== END Physical_Type_Descriptor Class ====*/
 
@@ -1095,6 +1111,7 @@ void Grid_Tile::set_height_offset(int h_offset){
 /*==== Arch_Structs Class ====*/
 Arch_Structs::Arch_Structs(){
 	this->fill_type_index = UNDEFINED;
+	this->perimeter_type_index = UNDEFINED;
 }
 
 /* allocate and create the specified number of uninitialized block type entries */
@@ -1131,7 +1148,7 @@ void Arch_Structs::set_fill_type(){
 			if (tile->get_width_offset() != 0 || tile->get_height_offset() != 0){
 				continue;
 			}
-
+			
 			int block_type_index = tile->get_type_index();
 			type_counts[block_type_index]++;
 		}
@@ -1154,6 +1171,70 @@ void Arch_Structs::set_fill_type(){
 /* returns 'fill_type_index' -- the index of the most common block in the grid */
 int Arch_Structs::get_fill_type_index() const{
 	return this->fill_type_index;
+}
+
+/* sets 'perimeter_type_index' according to the most common block located on the perimeter */
+void Arch_Structs::set_perimeter_type() {
+	int grid_size_x;
+	int grid_size_y;
+
+	int num_block_types = this->get_num_block_types();
+
+	vector<int> type_counts;
+	type_counts.assign(num_block_types, 0);
+	
+	this->get_grid_size(&grid_size_x, &grid_size_y);
+	
+	/* traverse each block of the grid */
+	for (int ix = 0; ix < grid_size_x; ix++){
+		for (int iy = 0; iy < grid_size_y; iy++){
+			if (ix > 0 && ix < grid_size_x - 1 && iy > 0 && iy < grid_size_y - 1)
+				continue;
+			const Grid_Tile *tile = &this->grid[ix][iy];
+			int type_idx = tile->get_type_index();
+			if (this->block_type[type_idx].get_num_pins() > 0)
+				type_counts[type_idx]++;
+		}
+	}
+	
+	/* with all blocks of the grid traversed, figure out which block type is the most common */
+	int most_common_type = 0;
+	int most_common_type_num = type_counts[0];
+	for (int itype = 1; itype < num_block_types; itype++){
+		int this_num = type_counts[itype];
+
+		if (this_num > most_common_type_num){
+			most_common_type = itype;
+			most_common_type_num = this_num;
+		}
+	}
+	this->perimeter_type_index = most_common_type;
+}
+
+/* returns 'perimeter_type_index' -- the index of the block on the perimeter */
+int Arch_Structs::get_perimeter_type_index() const {
+	return this->perimeter_type_index;
+}
+
+void Arch_Structs::set_block_types() {
+	this->set_fill_type();
+	this->set_perimeter_type();
+	
+	for (auto &block: block_type) {
+		if (block.get_height() == 1 && block.get_width() == 1) {
+			if (block.get_num_pins() == 0) {
+				block.set_block_type(EMPTY);
+			} else if (this->perimeter_type_index == block.get_index()) {
+				block.set_block_type(IO);
+			} else if (this->fill_type_index == block.get_index()) {
+				block.set_block_type(CLB);
+			} else {
+				WTHROW(EX_INIT, "Unknown block type: " << block.get_name());
+			}
+		} else if (block.get_height() > 1 || block.get_width() > 1) {
+			block.set_block_type(MACRO);
+		}
+	}
 }
 
 /* returns the x and y sizes of the grid */

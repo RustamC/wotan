@@ -132,7 +132,7 @@ void parse_rr_graph_file( std::string rr_graph_file, Arch_Structs *arch_structs,
 			/* Load grid */
 			next_component = get_single_child(rr_graph, "grid", loc_data);
 			process_grid(arch_structs, next_component, loc_data);
-			arch_structs->set_fill_type();
+			arch_structs->set_block_types();
 
 			/* Load rr node indicies */
 			int x_size, y_size;
