@@ -329,40 +329,7 @@ static void analyze_fpga_architecture(User_Options *user_opts, Analysis_Settings
 		analyze_test_tile_connections(user_opts, analysis_settings, arch_structs, routing_structs, ENUMERATE);
 		analyze_test_tile_connections(user_opts, analysis_settings, arch_structs, routing_structs, PROBABILITY);
 	} else {
-		//XXX: binary search doesn't actually work right now. Seems to be bugged out right now. Probably some structures aren't being reset.
-		/* perform a binary search to find the demand_multiplier value required to achieve the target level of reliability */
-		int max_tries = 20;
-		float target_tolerance = 0.02;
-		float multiplier_high = 200.0;
-		float multiplier_low = 0.0;
-		float reliability = -1;
-
-		int try_num = 1;
-		while ( abs(reliability - user_opts->target_reliability) > target_tolerance ){
-			if (try_num > max_tries){
-				cout << "WARNING! Search has taken more than " << max_tries << " tries! Using last multiplier value." << endl;
-				break;
-			}
-
-			user_opts->demand_multiplier = (multiplier_high + multiplier_low) / 2;
-
-			//TODO: ideally, the enumerate part should only be done once, with the demand multiplier then being re-applied to all
-			//      nodes.
-			analyze_test_tile_connections(user_opts, analysis_settings, arch_structs, routing_structs, ENUMERATE);
-			reliability = analyze_test_tile_connections(user_opts, analysis_settings, arch_structs, routing_structs, PROBABILITY);
-
-			/* perform search and get result... */
-
-			if (reliability < user_opts->target_reliability){
-				multiplier_high = user_opts->demand_multiplier;
-			} else {
-				multiplier_low = user_opts->demand_multiplier;
-			}
-		}
-
-		cout << endl;
-		cout << "Required demand multiplier: " << user_opts->demand_multiplier << endl;
-		cout << "Absolute routability metric: " << 1.0/user_opts->demand_multiplier << endl;
+		WTHROW(EX_OTHER, "Not implemented!");
 	}
 
 	update_screen(routing_structs, arch_structs, user_opts);
