@@ -463,14 +463,15 @@ float analyze_test_tile_connections(User_Options *user_opts, Analysis_Settings *
 		WTHROW(EX_INIT, "path dependence self-congestion mode cannot be used if routing probability is analyzed by propagating node probabilities.");
 	}
 
-	int fill_type_ind = arch_structs->get_fill_type_index();
-	Physical_Type_Descriptor *fill_type = &arch_structs->block_type[fill_type_ind];
 	int grid_size_x, grid_size_y;
 	arch_structs->get_grid_size(&grid_size_x, &grid_size_y);
 
-	string fill_type_name = fill_type->get_name();
-
-	cout << "Enumerating paths for physical block type named '" << fill_type->get_name() << "'" << endl;
+	cout << "Enumerating paths for physical block types: ";
+	for (auto &ptd: arch_structs->block_type) {
+		if (ptd.get_block_type() == CLB || ptd.get_block_type() == MACRO)
+			cout << ptd.get_name() << ", ";
+	}
+	cout << endl;
 
 	/* allocate appropriate data structures for each thread */
 	int max_path_weight_bound = analysis_settings->get_max_path_weight( user_opts->max_connection_length ) * PATH_FLEXIBILITY_FACTOR;
@@ -753,22 +754,15 @@ static void get_corresponding_sink_ids(User_Options *user_opts, Analysis_Setting
 
 	/* check probability of source node. if it's 0, then no point in enumerating from it */
 	float sum_of_source_probabilities;
-	get_sum_of_source_probabilities(source_node_ind, routing_structs->rr_node, analysis_settings->pin_probabilities, *test_tile_type,
+	get_sum_of_source_probabilities(source_node_ind, routing_structs->rr_node, analysis_settings->ptd_pin_probabilities[test_tile->get_type_index()], *test_tile_type,
 				&sum_of_source_probabilities, NULL);
 	if (sum_of_source_probabilities == 0){
 		return;
 	}
 
 	/* make sure specified tile is of 'fill' type */
-	int fill_type_ind = arch_structs->get_fill_type_index();
-	if (fill_type_ind != test_tile->get_type_index()){
-		WTHROW(EX_PATH_ENUM, "Attempting to analyze source in a block that's not of fill type.");
-	}
-	
-	/* make sure the current grid tile is not at an offset */
-	if (test_tile->get_width_offset() != 0 || test_tile->get_height_offset() != 0){
-		WTHROW(EX_PATH_ENUM, "Fill type block with name '" << test_tile_type->get_name() << "' has non-zero width/height offset. " <<
-				"This sort of logic block is not currently allowed.");
+	if (test_tile->get_type_index() != CLB && test_tile->get_type_index() != MACRO){
+		WTHROW(EX_PATH_ENUM, "Attempting to analyze source in a block that's not of CLB/MACRO type.");
 	}
 
 	/* make sure the test tile has blocks at each possible connection length away from it. the furthest block from the test tile
@@ -792,7 +786,7 @@ static void get_corresponding_sink_ids(User_Options *user_opts, Analysis_Setting
 		}
 
 		int num_conns_at_length = conns_at_distance_from_tile(tile_coord.x, tile_coord.y, ilen, grid,
-					      grid_size_x, grid_size_y, block_type, fill_type_ind);
+					      grid_size_x, grid_size_y, block_type, UNDEFINED);
 
 		/* traverse a list of blocks that is a distance 'ilen' away from the test tile.
 		   here we want to consider each combination of dx and dy who's (individually absolute) sum adds up
@@ -1083,13 +1077,8 @@ static int conns_at_distance_from_tile(int tile_x, int tile_y, int length, t_gri
 			     (dest_y > 0 && dest_y < grid_size_y-1) ){
 
 				Grid_Tile *dest_tile = &grid[dest_x][dest_y];
-				int dest_type_ind = dest_tile->get_type_index();
 
-				if (dest_type_ind != fill_type_ind){
-					WTHROW(EX_PATH_ENUM, "Encountered block that isn't of fill type (i.e. not a logic block)");
-				}
-
-				int num_input_pins = block_type[dest_type_ind].get_num_receivers();
+				int num_input_pins = dest_tile->get_num_receivers();
 
 				num_conns += num_input_pins;
 			}

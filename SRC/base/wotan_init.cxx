@@ -73,6 +73,7 @@ void wotan_init(int argc, char **argv, User_Options *user_opts, Arch_Structs *ar
 		/* initialize analysis settings */
 		analysis_settings->alloc_and_set_pin_probabilities(user_opts->opin_probability, user_opts->ipin_probability, arch_structs);
 		analysis_settings->alloc_and_set_length_probabilities(user_opts);
+		analysis_settings->set_tiles_num_receivers(arch_structs, routing_structs);
 		analysis_settings->alloc_and_set_test_tile_coords(arch_structs, routing_structs);
 
 		/* initialize path count history structures of rr nodes */

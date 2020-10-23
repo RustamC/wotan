@@ -221,6 +221,45 @@ void Analysis_Settings::alloc_and_set_length_probabilities(User_Options *user_op
 	}
 }
 
+void Analysis_Settings::set_tiles_num_receivers (Arch_Structs *arch_structs, Routing_Structs *routing_structs) {
+	const int grid_height = arch_structs->get_grid_height();
+	const int grid_width  = arch_structs->get_grid_width();
+	
+	for (int ix = 0; ix < grid_width; ix++) {
+		for (int iy = 0; iy < grid_height; iy++) {
+			Grid_Tile *tile = &arch_structs->grid[ix][iy];
+			
+			auto &tile_type = arch_structs->block_type[tile->get_type_index()];
+			
+			if (tile_type.get_width() == 1 && tile_type.get_height() == 1) {
+				tile->set_num_receivers(tile_type.get_num_receivers());
+			} else {
+				int num_receivers = 0;
+				for (int iclass = 0; iclass < (int)tile_type.class_inf.size(); iclass++){
+					Pin_Class *pin_class = &tile_type.class_inf[iclass];
+
+					if (pin_class->get_pin_type() == RECEIVER){
+						for (int ipin = 0; ipin < pin_class->get_num_pins(); ipin++) {
+							int pin = pin_class->pinlist[ipin];
+							
+							if (tile_type.is_global_pin[pin] == true) continue;
+							
+							vector<int> node_ind = get_rr_node_indices(arch_structs, routing_structs->rr_node_indices, ix, iy, IPIN, pin);
+							if (node_ind.size() != 1) {
+								WTHROW(EX_INIT, "Receiver pin " << pin << " of class " << iclass << "of " << tile_type.get_name() << " should have 1 IPIN node!");
+							}
+							auto &node = routing_structs->rr_node[node_ind[0]];
+							if (node.get_xlow() == ix && node.get_ylow() == iy)
+								++num_receivers;
+						}
+					}
+				}
+				tile->set_num_receivers(num_receivers);
+			}
+		}
+	}
+}
+
 /* allocates the test tile coords list and sets it based on the routing architecture */
 void Analysis_Settings::alloc_and_set_test_tile_coords(Arch_Structs *arch_structs, Routing_Structs *routing_structs){
 	this->test_tile_coords.clear();
@@ -1108,6 +1147,7 @@ Grid_Tile::Grid_Tile(){
 	this->type_index = UNDEFINED;
 	this->type_width_offset = UNDEFINED;
 	this->type_height_offset = UNDEFINED;
+	this->type_num_receivers = UNDEFINED;
 }
 
 /* returns the index of the corresponding physical block type */
@@ -1124,6 +1164,10 @@ int Grid_Tile::get_height_offset() const{
 	return this->type_height_offset;
 }
 
+int Grid_Tile::get_num_receivers() const{
+	return this->type_num_receivers;
+}
+
 /* sets the index of the block type that is located at this tile */
 void Grid_Tile::set_type_index(int ind){
 	this->type_index = ind;
@@ -1132,6 +1176,10 @@ void Grid_Tile::set_type_index(int ind){
 /* sets the width offset from the block's origin tile at this tile */
 void Grid_Tile::set_width_offset(int w_offset){
 	this->type_width_offset = w_offset;
+}
+
+void Grid_Tile::set_num_receivers(int n_receivers) {
+	this->type_num_receivers = n_receivers;
 }
 
 /* sets the height offset from the block's origin tile at this tile */
