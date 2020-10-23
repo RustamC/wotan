@@ -236,7 +236,10 @@ void Analysis_Settings::alloc_and_set_test_tile_coords(Arch_Structs *arch_struct
 	for (int ix = 1; ix < grid_size_x-1; ix++){
 		for (int iy = 1; iy < grid_size_y-1; iy++){
 			Coordinate coord(ix, iy);
-			this->test_tile_coords.push_back(coord);
+			int type_indx = arch_structs->grid[ix][iy].get_type_index();
+			e_block_type type = arch_structs->block_type[type_indx].get_block_type();
+			if (type == CLB || type == MACRO)
+				this->test_tile_coords.push_back(coord);
 		}
 	}
 }
