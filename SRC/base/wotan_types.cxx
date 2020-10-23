@@ -259,6 +259,8 @@ RR_Node_Base::RR_Node_Base(){
 	this->ylow = UNDEFINED;
 	this->xhigh = UNDEFINED;
 	this->yhigh = UNDEFINED;
+	this->xs = UNDEFINED;
+	this->ys = UNDEFINED;
 	this->R = UNDEFINED;
 	this->C = UNDEFINED;
 	this->ptc_num = UNDEFINED;
@@ -277,6 +279,8 @@ RR_Node_Base::RR_Node_Base(const RR_Node_Base &obj){
 	this->ylow = obj.get_ylow();
 	this->xhigh = obj.get_xhigh();
 	this->yhigh = obj.get_yhigh();
+	this->xs = obj.get_xs();
+	this->ys = obj.get_ys();
 	this->R = obj.get_R();
 	this->C = obj.get_C();
 	this->ptc_num = obj.get_ptc_num();
@@ -345,6 +349,22 @@ short RR_Node_Base::get_xhigh() const{
 /* get the high y coordinate of this node */
 short RR_Node_Base::get_yhigh() const{
 	return this->yhigh;
+}
+
+/* get the xs coordinate of this node */
+short RR_Node_Base::get_xs() const{
+	if (this->type != SOURCE && this->type != SINK) {
+		WTHROW(EX_GRAPH, "Attempted to access RR node xs for non-SOURCE/SINK type " << this->get_rr_type_string());
+	}
+	return this->xs;
+}
+
+/* get the ys coordinate of this node */
+short RR_Node_Base::get_ys() const{
+	if (this->type != SOURCE && this->type != SINK) {
+		WTHROW(EX_GRAPH, "Attempted to access RR node ys for non-SOURCE/SINK type " << this->get_rr_type_string());
+	}
+	return this->ys;
 }
 
 
@@ -432,6 +452,16 @@ void RR_Node_Base::set_coordinates(short x1, short y1, short x2, short y2){
 		/* a node that spans multiple CLBs in both the x and y directions?? */
 		WTHROW(EX_GRAPH, "Routing node of type " << this->get_rr_type_string() << " has both x and y spans greater than 1.");
 	}
+}
+
+/* set xs, ys of this node (only for SOURCE/SINK nodes) */
+void RR_Node_Base::set_source_sink_coordinates(short x, short y) {
+	if (this->type != SOURCE && this->type != SINK) {
+		WTHROW(EX_GRAPH, "Attempted to set RR node xs, ys for non-SOURCE/SINK type " << this->get_rr_type_string());
+	}
+	
+	this->xs = x;
+	this->ys = y;
 }
 
 /* set node resistance */

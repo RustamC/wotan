@@ -38,6 +38,8 @@ bool verify_rr_node_indices(Arch_Structs *arch_structs, const t_rr_node_indices 
 
 void get_grid_size(pugi::xml_node parent, const pugiutil::loc_data &loc_data, int &x_size, int &y_size);
 
+void set_source_sink_coordinates (Arch_Structs *arch_structs, Routing_Structs *routing_structs);
+
 /**** Function Definitions ****/
 /* Parses the specified rr structs file according the specified rr structs mode */
 void parse_rr_graph_file( std::string rr_graph_file, Arch_Structs *arch_structs, Routing_Structs *routing_structs, e_rr_graph_mode rr_graph_mode ) {
@@ -143,6 +145,8 @@ void parse_rr_graph_file( std::string rr_graph_file, Arch_Structs *arch_structs,
 			bool verified = verify_rr_node_indices(arch_structs, routing_structs->rr_node_indices, routing_structs->rr_node);
 			if (verified == false)
 				WTHROW(EX_INIT, rr_graph_file << ": Wrong rr_node_indices!");
+			
+			set_source_sink_coordinates (arch_structs, routing_structs);
 		}
 	} catch (XmlError &e) {
 		WTHROW(EX_INIT, rr_graph_file << ":" << e.line() << ": " << e.what() << endl);
@@ -936,6 +940,66 @@ bool verify_rr_node_indices(Arch_Structs *arch_structs, const t_rr_node_indices&
 	}
 
 	return true;
+}
+
+/* Set xs, ys for all SOURCE, SINK */
+void set_source_sink_coordinates (Arch_Structs *arch_structs, Routing_Structs *routing_structs) {
+	for (e_rr_type rr_type : RR_TYPES) {
+		int width = arch_structs->get_grid_width();
+		int height = arch_structs->get_grid_height();
+
+		if (rr_type != SOURCE && rr_type != SINK) {
+			continue;
+		}
+		
+		for (int x = 0; x < width; ++x) {
+			for (int y = 0; y < height; ++y) {
+				for (e_side side : SIDES) {
+					for (int inode : routing_structs->rr_node_indices[rr_type][x][y][side]) {
+						if (inode < 0) continue;
+
+						auto& rr_node = routing_structs->rr_node[inode];
+
+						if (rr_node.get_rr_type() != rr_type) {
+							WTHROW(EX_INIT, "RR node type does not match between rr_nodes and rr_node_indices (" << rr_node_typename[rr_node.get_rr_type()]
+									<< "/" << rr_node_typename[rr_type] << "): " << describe_rr_node(routing_structs->rr_node, inode).c_str());
+						}
+						
+						int *edges, num_edges;
+						if (rr_type == SOURCE) {
+							edges = rr_node.out_edges;
+							num_edges = rr_node.get_num_out_edges();
+						} else {
+							edges = rr_node.in_edges;
+							num_edges = rr_node.get_num_in_edges();
+						}
+						
+						
+						int xs = UNDEFINED, ys = UNDEFINED;
+						for (int iedge = 0; iedge < num_edges; iedge++) {
+							auto& to_node = routing_structs->rr_node[edges[iedge]];
+							
+							int xlow = to_node.get_xlow();
+							int ylow = to_node.get_ylow();
+							
+							if (xs == UNDEFINED && ys == UNDEFINED) {
+								xs = xlow;
+								ys = ylow;
+							} else {
+								if (xs != xlow && ys != ylow) {
+									WTHROW(EX_INIT, "RR node " << rr_node_typename[rr_type] << "(" << inode << ") is connected to pins located at different locations:" << endl
+										<< "Some nodes are located at (" << xs << ", " << ys << ") and some (" << edges[iedge] << ") at (" << xlow << ", " << ylow << ")");
+								}
+							}
+						} 
+						
+						rr_node.set_source_sink_coordinates(xs, ys);
+					}
+				}
+			}
+		}
+	}
+		
 }
 
 /* If Wotan is being initialized based on an rr structs file then backwards edges/switches need to be determined

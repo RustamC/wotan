@@ -445,6 +445,9 @@ void create_virtual_sources(Routing_Structs *routing_structs){
 		x2 = sink_node.get_xhigh();
 		y2 = sink_node.get_yhigh();
 
+		short xs, ys;
+		xs = sink_node.get_xs();
+		ys = sink_node.get_ys();
 
 		if (num_in_edges_sink <= 0){
 			WTHROW(EX_INIT, "Found sink node (" << inode << ") with no incoming edges");
@@ -482,6 +485,7 @@ void create_virtual_sources(Routing_Structs *routing_structs){
 		new_node.set_is_virtual_source(true);
 		new_node.set_rr_type(SOURCE);
 		new_node.set_coordinates(x1, y1, x2, y2);
+		new_node.set_source_sink_coordinates(xs, ys);
 		new_node.set_ptc_num(ptc);
 
 		/* we have found unique nodes which connect into the ipins (that then connect into the sink). add these nodes as out-edges for

@@ -277,6 +277,8 @@ private:
 	short ylow;					/* y coordinate of the low end of this routing resource */
 	short xhigh;					/* x coordinate of the high end of this routing resource */
 	short yhigh;					/* y coordinate of the high end of this routing resource */
+	short xs;					/* x coordinate of the SOURCE (supposed that SOURCE is connected only to pins in the same grid cell) */
+	short ys;					/* x coordinate of the SINK (supposed that SINK is connected only to pins in the same grid cell)*/
 
 	float R;					/* resistance (ohms) to go through this node (doesn't include switch resistances) */
 	float C;					/* total capacitance (farads) of this node (including switches that hang off from it) */
@@ -310,6 +312,8 @@ public:
 	short get_ylow() const;				/* get low y coordinate of this node */
 	short get_xhigh() const;			/* get high x coordinate of this node */
 	short get_yhigh() const;			/* get high y coordinate of this node */
+	short get_xs() const;				/* get x coordinate of the SOURCE */
+	short get_ys() const;				/* get y coordinate of the SINK */
 	short get_span() const;				/* how many logic blocks does this node span? */
 	float get_R() const;				/* get node resistance */
 	float get_C() const;				/* get node capacitance */
@@ -323,7 +327,9 @@ public:
 	/* set methods */
 	void set_rr_type(e_rr_type);			/* set rr type of this node */
 	void set_coordinates(short x1, short y1, 	/* set node coordinates. x1/x2 don't have to be ordered (same for y1/y2) */
-	                     short x2, short y2);	
+	                     short x2, short y2);
+	void set_source_sink_coordinates(short xs, 
+					 short ys);
 	void set_R(float);				/* set resistance of this node */
 	void set_C(float);				/* set capacitance of this node */
 	void set_ptc_num(short);			/* set pin-track-class number of this node */
