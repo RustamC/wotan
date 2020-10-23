@@ -973,8 +973,7 @@ void set_source_sink_coordinates (Arch_Structs *arch_structs, Routing_Structs *r
 							edges = rr_node.in_edges;
 							num_edges = rr_node.get_num_in_edges();
 						}
-						
-						
+
 						int xs = UNDEFINED, ys = UNDEFINED;
 						for (int iedge = 0; iedge < num_edges; iedge++) {
 							auto& to_node = routing_structs->rr_node[edges[iedge]];
@@ -992,7 +991,9 @@ void set_source_sink_coordinates (Arch_Structs *arch_structs, Routing_Structs *r
 								}
 							}
 						} 
-						
+
+						if (xs == UNDEFINED || ys == UNDEFINED)
+						    WTHROW(EX_INIT, "RR node " << rr_node_typename[rr_type] << "(" << inode << ") has no connections!");
 						rr_node.set_source_sink_coordinates(xs, ys);
 					}
 				}
