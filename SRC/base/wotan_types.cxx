@@ -101,7 +101,7 @@ int get_rr_node_index(Arch_Structs *arch_structs,
         	case SOURCE:
 			assert((size_t)ptc < ptd.class_inf.size());
 			// @TODO: Get node from Routing_Struct::rr_node[] and if it's virtual SOURCE than doesn't need next assert
-			//assert(ptd.class_inf[ptc].get_pin_type() == DRIVER);
+			assert(ptd.class_inf[ptc].get_pin_type() == DRIVER);
 			break;
 
 		case SINK:
