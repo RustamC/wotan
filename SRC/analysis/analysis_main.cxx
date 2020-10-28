@@ -298,8 +298,7 @@ static void get_prob_analysis_tile_region(User_Options *user_opts, int grid_size
 static void get_conn_length_stats(User_Options *user_opts, Analysis_Settings *analysis_settings, Routing_Structs *routing_structs, 
                         Arch_Structs *arch_structs, e_pin_type enumerate_type, vector<int> &conns_at_length);
 /* returns number of connections from tile at the specified coordinates at specified length */
-static int conns_at_distance_from_tile(int tile_x, int tile_y, int length, t_grid &grid, 
-				int grid_size_x, int grid_size_y, t_block_type &block_type, int fill_type_ind);
+static int conns_at_distance_from_tile(int tile_x, int tile_y, int length, t_grid &grid, int grid_size_x, int grid_size_y);
 /* at each length, sums the probabilities of the x% worst possible connections */
 static float analyze_lowest_probs_pqs( vector< t_lowest_probs_pq > &lowest_probs_pqs);
 
@@ -414,7 +413,7 @@ static void analyze_simple_graph(User_Options *user_opts, Analysis_Settings *ana
 
 	/* perform path enumeration */
 	enumerate_connection_paths(source_node_ind, sink_node_ind, analysis_settings, arch_structs, routing_structs, ss_distances,
-	                     node_topo_inf, large_connection_length, nodes_visited, user_opts, (float)UNDEFINED);
+				node_topo_inf, large_connection_length, nodes_visited, user_opts, (float)UNDEFINED);
 
 	/* print how many paths run through each node */
 	cout << "Node demands: " << endl;
@@ -428,8 +427,8 @@ static void analyze_simple_graph(User_Options *user_opts, Analysis_Settings *ana
 
 	/* estimate probability of routing from source to sink */
 	float connection_probability = estimate_connection_probability(source_node_ind, sink_node_ind, analysis_settings, arch_structs,
-	                                                   routing_structs, ss_distances, node_topo_inf, large_connection_length,
-							   nodes_visited, user_opts);
+							routing_structs, ss_distances, node_topo_inf, large_connection_length,
+							nodes_visited, user_opts);
 
 	/* print connection probability */
 	cout << "Connection probability: " << connection_probability << endl;
@@ -754,14 +753,14 @@ static void get_corresponding_sink_ids(User_Options *user_opts, Analysis_Setting
 
 	/* check probability of source node. if it's 0, then no point in enumerating from it */
 	float sum_of_source_probabilities;
-	get_sum_of_source_probabilities(source_node_ind, routing_structs->rr_node, analysis_settings->ptd_pin_probabilities[test_tile->get_type_index()], *test_tile_type,
+	get_sum_of_source_probabilities(source_node_ind, routing_structs->rr_node, analysis_settings->ptd_pin_probabilities[test_tile_type->get_block_type()], *test_tile_type,
 				&sum_of_source_probabilities, NULL);
 	if (sum_of_source_probabilities == 0){
 		return;
 	}
 
 	/* make sure specified tile is of 'fill' type */
-	if (test_tile->get_type_index() != CLB && test_tile->get_type_index() != MACRO){
+	if (test_tile_type->get_block_type() != CLB && test_tile_type->get_block_type() != MACRO){
 		WTHROW(EX_PATH_ENUM, "Attempting to analyze source in a block that's not of CLB/MACRO type.");
 	}
 
@@ -786,7 +785,7 @@ static void get_corresponding_sink_ids(User_Options *user_opts, Analysis_Setting
 		}
 
 		int num_conns_at_length = conns_at_distance_from_tile(tile_coord.x, tile_coord.y, ilen, grid,
-					      grid_size_x, grid_size_y, block_type, UNDEFINED);
+					      grid_size_x, grid_size_y);
 
 		/* traverse a list of blocks that is a distance 'ilen' away from the test tile.
 		   here we want to consider each combination of dx and dy who's (individually absolute) sum adds up
@@ -800,7 +799,7 @@ static void get_corresponding_sink_ids(User_Options *user_opts, Analysis_Setting
 
 				/* check if this block is within grid bounds */
 				if ( (dest_x > 0 && dest_x < grid_size_x-1) &&
-				     (dest_y > 0 && dest_y < grid_size_y-1) ){
+					(dest_y > 0 && dest_y < grid_size_y-1) ){
 
 					Grid_Tile *dest_tile = &grid[dest_x][dest_y];
 					int dest_type_ind = dest_tile->get_type_index();
@@ -826,7 +825,9 @@ static void get_corresponding_sink_ids(User_Options *user_opts, Analysis_Setting
 						/* get node corresponding to this sink */	
 						int sink_node_ind = get_rr_node_index(arch_structs, routing_structs->rr_node_indices,
 													dest_x, dest_y, SINK, iclass);
-
+						if (routing_structs->rr_node[sink_node_ind].get_xs() != dest_x &&
+							routing_structs->rr_node[sink_node_ind].get_ys() != dest_y)
+							continue;
 						//XXX
 						double rand_value = (double)rand() / (double)(RAND_MAX);
 						//if (rand_value > FRACTION_CONNS){
@@ -840,7 +841,9 @@ static void get_corresponding_sink_ids(User_Options *user_opts, Analysis_Setting
 						//XXX
 						source_conns_at_length.push_back( num_conns_at_length /** user_opts->length_probabilities[ilen] * FRACTION_CONNS*/);
 
+						pthread_mutex_lock(&f_analysis_results.thread_mutex);
 						f_analysis_results.desired_conns++;
+						pthread_mutex_unlock(&f_analysis_results.thread_mutex);
 					}
 				}
 			}
@@ -999,9 +1002,6 @@ static void get_conn_length_stats(User_Options *user_opts, Analysis_Settings *an
 	int grid_size_x, grid_size_y;
 	arch_structs->get_grid_size(&grid_size_x, &grid_size_y);
 
-	int fill_type_ind = arch_structs->get_fill_type_index();
-	Physical_Type_Descriptor *fill_type = &block_type[fill_type_ind];
-
 	/* 0..max_conn_length possible connection lengths */
 	conns_at_length.assign(max_conn_length + 1, 0);
 
@@ -1009,47 +1009,27 @@ static void get_conn_length_stats(User_Options *user_opts, Analysis_Settings *an
 	int from_x, to_x, from_y, to_y;
 	get_prob_analysis_tile_region(user_opts, grid_size_x, grid_size_y, &from_x, &from_y, &to_x, &to_y);
 
-	/* calculate number of sources in a tile of fill type */
-	int num_tile_pins = fill_type->get_num_pins();
-	int num_tile_sources = 0;
-	for (int ipin = 0; ipin < num_tile_pins; ipin++){
-		/* skip global pins */
-		if (fill_type->is_global_pin[ipin]){
-			continue;
-		}
-
-		/* get type of this pin */
-		int pin_class_ind = fill_type->pin_class[ipin];
-		e_pin_type pin_type = fill_type->class_inf[pin_class_ind].get_pin_type();
-
-		if (pin_type == enumerate_type){
-			/* get probabiity of this pin being used as a source */
-			float pin_prob = analysis_settings->pin_probabilities[ipin];
-			if (pin_prob > 0){
-				num_tile_sources++;
-			}
-		}
-	}
-
 	/* iterate over the FPGA tiles as per 'get_prob_analysis_tile_region' */
 	for (int ix = from_x; ix <= to_x; ix++){
 		for (int iy = from_y; iy <= to_y; iy++){
 			int block_type_ind = grid[ix][iy].get_type_index();
-			int width_offset = grid[ix][iy].get_width_offset();
-			int height_offset = grid[ix][iy].get_height_offset();
 
+			if (block_type[block_type_ind].get_block_type() == EMPTY)
+				continue;
+			
 			/* error checks */
-			if (block_type_ind != fill_type_ind){
-				WTHROW(EX_PATH_ENUM, "Expected logic block type");
-			}
-			if (width_offset > 0 || height_offset > 0){
-				WTHROW(EX_PATH_ENUM, "Didn't expect logic block to have > 0 width/height offset");
+			if (block_type[block_type_ind].get_block_type() != CLB &&
+				block_type[block_type_ind].get_block_type() != MACRO){
+				WTHROW(EX_PATH_ENUM, "Expected logic/macro block type");
 			}
 
+			int num_tile_sources = (enumerate_type == DRIVER) 
+				? grid[ix][iy].get_num_sources()
+				: grid[ix][iy].get_num_receivers();
+			
 			/* for each legal length */
 			for (int ilen = 1; ilen <= max_conn_length; ilen++){
-				conns_at_length[ilen] += num_tile_sources * conns_at_distance_from_tile(ix, iy, ilen, grid, grid_size_x, grid_size_y,
-				                                                                       block_type, fill_type_ind);
+				conns_at_length[ilen] += num_tile_sources * conns_at_distance_from_tile(ix, iy, ilen, grid, grid_size_x, grid_size_y);
 			}
 		}
 	}
@@ -1059,7 +1039,7 @@ static void get_conn_length_stats(User_Options *user_opts, Analysis_Settings *an
 /* returns number of connections from tile at the specified coordinates at specified length.
    this is basically a sum of the number of input pins for each tile 'length' away from this one */
 static int conns_at_distance_from_tile(int tile_x, int tile_y, int length, t_grid &grid, 
-				int grid_size_x, int grid_size_y, t_block_type &block_type, int fill_type_ind){
+				int grid_size_x, int grid_size_y){
 
 	int num_conns = 0;
 
@@ -1077,8 +1057,7 @@ static int conns_at_distance_from_tile(int tile_x, int tile_y, int length, t_gri
 			     (dest_y > 0 && dest_y < grid_size_y-1) ){
 
 				Grid_Tile *dest_tile = &grid[dest_x][dest_y];
-
-				int num_input_pins = dest_tile->get_num_receivers();
+				int num_input_pins = dest_tile->get_num_all_receivers();
 
 				num_conns += num_input_pins;
 			}
@@ -1116,7 +1095,7 @@ void alloc_self_congestion_structs(User_Options *user_opts, Routing_Structs *rou
 
 	if ((int)thread_node_topo_inf.size() != num_threads){
 		WTHROW(EX_PATH_ENUM, "Expected thread_node_topo_inf structure to have the same number of elements as there are threads. Size: " << 
-		                      thread_node_topo_inf.size());
+					thread_node_topo_inf.size());
 	}
 
 	//giving a bit of extra leeway
@@ -1170,8 +1149,7 @@ static void analyze_connection(int source_node_ind, int sink_node_ind, Analysis_
 
 	/* get pin and length probabilities */
 	float length_prob = analysis_settings->length_probabilities[conn_length];
-	t_prob_list &pin_probs = analysis_settings->pin_probabilities;
-
+	
 	/* if the length probability corresponding to this connection is 0, then this connection won't contribute
 	   anything to the routability metric -- no point looking at it */
 	if ( PROBS_EQUAL(length_prob, 0.0) ){
@@ -1179,17 +1157,25 @@ static void analyze_connection(int source_node_ind, int sink_node_ind, Analysis_
 	}
 
 	/* get the fill type descriptor (the most common block in the architecture) */
-	int fill_type_ind = arch_structs->get_fill_type_index();
-	Physical_Type_Descriptor &fill_block_type = arch_structs->block_type[fill_type_ind];
+	int source_x = rr_node[source_node_ind].get_xs();
+	int source_y = rr_node[source_node_ind].get_ys();
+	int source_type_ind = arch_structs->grid[source_x][source_y].get_type_index();
+	Physical_Type_Descriptor &source_block_type = arch_structs->block_type[source_type_ind];
+	t_prob_list &pin_probs = analysis_settings->ptd_pin_probabilities[(int)source_block_type.get_block_type()];
 
+	int sink_x = rr_node[sink_node_ind].get_xs();
+	int sink_y = rr_node[sink_node_ind].get_ys();
+	int sink_type_ind = arch_structs->grid[sink_x][sink_y].get_type_index();
+	Physical_Type_Descriptor &sink_block_type = arch_structs->block_type[sink_type_ind];
+	
 	//TODO: comment. the basic gist (as I remember it) is that a single source/sink can represent multiple
 	//	sources/sinks in reality (as in the case of pin equivalence). in that case the scaling factors during path
 	//	enumeration, and after probability analysis, have to be adjusted accordingly
 	float sum_of_source_probabilities;
 	float one_pin_prob;
-	get_sum_of_source_probabilities(source_node_ind, rr_node, pin_probs, fill_block_type, &sum_of_source_probabilities, &one_pin_prob);
-	int num_sinks = get_num_sinks(sink_node_ind, rr_node, fill_block_type);
-	int num_sources = get_num_sources(source_node_ind, rr_node, fill_block_type);
+	get_sum_of_source_probabilities(source_node_ind, rr_node, pin_probs, source_block_type, &sum_of_source_probabilities, &one_pin_prob);
+	int num_sinks = get_num_sinks(sink_node_ind, rr_node, sink_block_type);
+	int num_sources = get_num_sources(source_node_ind, rr_node, source_block_type);
 
 	float source_probability;
 	//if (topological_mode == ENUMERATE){
@@ -1212,14 +1198,14 @@ static void analyze_connection(int source_node_ind, int sink_node_ind, Analysis_
 		/* check whether this source node corresponds to pins of 'driver' or 'receiver' type to figure out which part of the reachability
 		   metric this connection applies to */
 		int source_ptc = rr_node[source_node_ind].get_ptc_num();
-		Pin_Class &source_pin_class = fill_block_type.class_inf[source_ptc];
+		Pin_Class &source_pin_class = source_block_type.class_inf[source_ptc];
 		e_pin_type source_pin_type = source_pin_class.get_pin_type();
 
 		/* estimate probability of connection being routable and increment the probability metric */
 		float probability_connection_routable = estimate_connection_probability(source_node_ind, sink_node_ind, analysis_settings, arch_structs, 
 							routing_structs, ss_distances, node_topo_inf, conn_length, 
 							nodes_visited, user_opts);
-
+		
 		/* increment the probability metric */
 		if (probability_connection_routable >= 0){
 			float scaling_factor = (float)num_sinks * source_probability * length_prob / (float)number_conns_at_length;
@@ -1275,7 +1261,7 @@ void enumerate_connection_paths(int source_node_ind, int sink_node_ind, Analysis
 
 	/* perform path enumeration */
 	if (max_path_weight > 0 && min_dist > 0){
-
+		
 		Enumerate_Structs enumerate_structs;
 		enumerate_structs.mode = BY_PATH_WEIGHT;
 
@@ -1513,7 +1499,11 @@ void put_children_on_pq_and_set_ss_distance(int num_edges, int *edge_list, int b
 	dest_yhigh = rr_node[to_node_ind].get_yhigh();
 
 	/* expecting the destination node to not be localized to one tile only */
-	if (dest_xlow != dest_xhigh || dest_ylow != dest_yhigh){
+	if (rr_node[to_node_ind].get_rr_type() == SOURCE || rr_node[to_node_ind].get_rr_type() == SINK) {
+		dest_xlow = dest_xhigh = rr_node[to_node_ind].get_xs();
+		dest_ylow = dest_yhigh = rr_node[to_node_ind].get_ys();
+	}
+	if (dest_xlow != dest_xhigh || dest_ylow != dest_yhigh) {
 		WTHROW(EX_PATH_ENUM, "Expected destination node to be localized to a single tile");
 	}
 

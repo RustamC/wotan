@@ -262,6 +262,7 @@ public:
 	void alloc_and_set_length_probabilities(User_Options*);			/* set length probabilities (based on length probabilities from User_Options) */
 	void alloc_and_set_test_tile_coords(Arch_Structs*, Routing_Structs*);	/* allocates the test_tile_coords list and sets it based on routing architecture */
 	void set_tiles_num_receivers(Arch_Structs*, Routing_Structs*);
+	void set_tiles_num_sources(Arch_Structs*, Routing_Structs*);
 
 	/* get methods */
 	int get_max_path_weight(int conn_length);				/* returns maximum allowable path weight according to passed in connection length */
@@ -542,7 +543,9 @@ private:
 	int type_index;			/* the index (to t_block_type) of the block type that is at this grid location */
 	int type_width_offset;		/* the width offset from the block's origin (0,0) tile at this grid coordinate */
 	int type_height_offset;		/* the height offset from the block's origin (0,0) tile at this grid coordinate */
-	int type_num_receivers;
+	int type_num_all_receivers;
+	int type_num_receivers;		/* only pins with prob > 0*/
+	int type_num_sources;
 public:
 
 	Grid_Tile();
@@ -551,13 +554,17 @@ public:
 	int get_type_index() const;
 	int get_width_offset() const;
 	int get_height_offset() const;
+	int get_num_all_receivers() const;
 	int get_num_receivers() const;
+	int get_num_sources() const;
 
 	/* set methods */
 	void set_type_index(int);
 	void set_width_offset(int);
 	void set_height_offset(int);
+	void set_num_all_receivers(int);
 	void set_num_receivers(int);
+	void set_num_sources(int);
 };
 
 

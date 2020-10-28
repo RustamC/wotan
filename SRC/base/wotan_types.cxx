@@ -98,7 +98,7 @@ int get_rr_node_index(Arch_Structs *arch_structs,
 	assert(ptc >= 0);
 
 	switch (rr_type) {
-        	case SOURCE:
+		case SOURCE:
 			assert((size_t)ptc < ptd.class_inf.size());
 			// @TODO: Get node from Routing_Struct::rr_node[] and if it's virtual SOURCE than doesn't need next assert
 			assert(ptd.class_inf[ptc].get_pin_type() == DRIVER);
@@ -186,7 +186,10 @@ Analysis_Settings::Analysis_Settings(){
 // TODO: different prob for each type
 void Analysis_Settings::alloc_and_set_pin_probabilities(double driver_prob, double receiver_prob, Arch_Structs *arch_structs){
 	for (auto &ptd: arch_structs->block_type) {
-		ptd.set_pin_probabilities(driver_prob, receiver_prob);
+		if (ptd.get_block_type() == MACRO)
+			ptd.set_pin_probabilities(driver_prob / 2., receiver_prob / 2.);
+		else
+			ptd.set_pin_probabilities(driver_prob, receiver_prob);
 		this->ptd_pin_probabilities[(int)ptd.get_block_type()] = ptd.pin_probabilities;
 	}
 }
@@ -221,6 +224,54 @@ void Analysis_Settings::alloc_and_set_length_probabilities(User_Options *user_op
 	}
 }
 
+void Analysis_Settings::set_tiles_num_sources(Arch_Structs *arch_structs, Routing_Structs *routing_structs) {
+	const int grid_height = arch_structs->get_grid_height();
+	const int grid_width  = arch_structs->get_grid_width();
+	
+	for (int ix = 0; ix < grid_width; ix++) {
+		for (int iy = 0; iy < grid_height; iy++) {
+			Grid_Tile *tile = &arch_structs->grid[ix][iy];
+			auto tile_type = &arch_structs->block_type[tile->get_type_index()];
+			
+			int num_tile_pins = tile_type->get_num_pins();
+			int num_tile_sources = 0;
+			for (int ipin = 0; ipin < num_tile_pins; ipin++){
+				/* skip global pins */
+				if (tile_type->is_global_pin[ipin]){
+					continue;
+				}
+
+				/* get type of this pin */
+				int pin_class_ind = tile_type->pin_class[ipin];
+				e_pin_type pin_type = tile_type->class_inf[pin_class_ind].get_pin_type();
+
+				if (pin_type == DRIVER){
+					vector<int> node_ind = get_rr_node_indices(arch_structs, routing_structs->rr_node_indices, ix, iy, OPIN, ipin);
+					if (node_ind.size() == 0) {
+						continue;
+					}
+					
+					if (node_ind.size() != 1) {
+						WTHROW(EX_INIT, "Driver pin " << ipin << " of class " << pin_class_ind << "of " << tile_type->get_name() << " should have 1 IPIN node!");
+					}
+
+					auto &node = routing_structs->rr_node[node_ind[0]];
+					if (node.get_xlow() == ix && node.get_ylow() == iy) {
+						/* get probabiity of this pin being used as a source */
+						float pin_prob = this->ptd_pin_probabilities[tile_type->get_block_type()][ipin];
+						if (pin_prob > 0){
+							num_tile_sources++;
+						}
+					}
+				}
+			}
+			
+			tile->set_num_sources(num_tile_sources);
+		}
+	}
+}
+
+
 void Analysis_Settings::set_tiles_num_receivers (Arch_Structs *arch_structs, Routing_Structs *routing_structs) {
 	const int grid_height = arch_structs->get_grid_height();
 	const int grid_width  = arch_structs->get_grid_width();
@@ -229,33 +280,48 @@ void Analysis_Settings::set_tiles_num_receivers (Arch_Structs *arch_structs, Rou
 		for (int iy = 0; iy < grid_height; iy++) {
 			Grid_Tile *tile = &arch_structs->grid[ix][iy];
 			
-			auto &tile_type = arch_structs->block_type[tile->get_type_index()];
-			
-			if (tile_type.get_width() == 1 && tile_type.get_height() == 1) {
-				tile->set_num_receivers(tile_type.get_num_receivers());
-			} else {
-				int num_receivers = 0;
-				for (int iclass = 0; iclass < (int)tile_type.class_inf.size(); iclass++){
-					Pin_Class *pin_class = &tile_type.class_inf[iclass];
+			auto tile_type = &arch_structs->block_type[tile->get_type_index()];
+			int num_tile_all_receivers = 0;
+			int num_tile_receivers = 0;
+			int num_tile_pins = tile_type->get_num_pins();
+			for (int ipin = 0; ipin < num_tile_pins; ipin++){
+				/* skip global pins */
+				if (tile_type->is_global_pin[ipin]){
+					continue;
+				}
 
-					if (pin_class->get_pin_type() == RECEIVER){
-						for (int ipin = 0; ipin < pin_class->get_num_pins(); ipin++) {
-							int pin = pin_class->pinlist[ipin];
-							
-							if (tile_type.is_global_pin[pin] == true) continue;
-							
-							vector<int> node_ind = get_rr_node_indices(arch_structs, routing_structs->rr_node_indices, ix, iy, IPIN, pin);
-							if (node_ind.size() != 1) {
-								WTHROW(EX_INIT, "Receiver pin " << pin << " of class " << iclass << "of " << tile_type.get_name() << " should have 1 IPIN node!");
-							}
-							auto &node = routing_structs->rr_node[node_ind[0]];
-							if (node.get_xlow() == ix && node.get_ylow() == iy)
-								++num_receivers;
+				/* get type of this pin */
+				int pin_class_ind = tile_type->pin_class[ipin];
+				e_pin_type pin_type = tile_type->class_inf[pin_class_ind].get_pin_type();
+
+				if (pin_type == RECEIVER){
+					vector<int> node_ind = get_rr_node_indices(arch_structs, routing_structs->rr_node_indices, ix, iy, IPIN, ipin);
+					if (node_ind.size() == 0) {
+						continue;
+					}
+					if (node_ind.size() != 1) {
+						WTHROW(EX_INIT, "Receiver pin " << ipin << " of class " << pin_class_ind << " of " << tile_type->get_name() << " should have 1 IPIN node!");
+					}
+
+					auto &node = routing_structs->rr_node[node_ind[0]];
+					if (node.get_xlow() == ix && node.get_ylow() == iy) {
+						++num_tile_all_receivers;
+						/* get probabiity of this pin being used as a source */
+						float pin_prob = this->ptd_pin_probabilities[tile_type->get_block_type()][ipin];
+						if (pin_prob > 0){
+							num_tile_receivers++;
 						}
 					}
+
 				}
-				tile->set_num_receivers(num_receivers);
 			}
+
+			if (tile_type->get_width() == 1 && tile_type->get_height() == 1) {
+				if (num_tile_all_receivers != tile_type->get_num_receivers())
+					WTHROW(EX_INIT, "Number of receivers diffs");
+			}
+			tile->set_num_all_receivers(num_tile_all_receivers);
+			tile->set_num_receivers(num_tile_receivers);
 		}
 	}
 }
@@ -321,8 +387,8 @@ RR_Node_Base::RR_Node_Base(const RR_Node_Base &obj){
 	this->ylow = obj.get_ylow();
 	this->xhigh = obj.get_xhigh();
 	this->yhigh = obj.get_yhigh();
-	this->xs = obj.get_xs();
-	this->ys = obj.get_ys();
+    this->xs = obj.get_xs();
+    this->ys = obj.get_ys();
 	this->R = obj.get_R();
 	this->C = obj.get_C();
 	this->ptc_num = obj.get_ptc_num();
@@ -395,17 +461,17 @@ short RR_Node_Base::get_yhigh() const{
 
 /* get the xs coordinate of this node */
 short RR_Node_Base::get_xs() const{
-	if (this->type != SOURCE && this->type != SINK) {
-		WTHROW(EX_GRAPH, "Attempted to access RR node xs for non-SOURCE/SINK type " << this->get_rr_type_string());
-	}
+	//if (this->type != SOURCE && this->type != SINK) {
+	//	WTHROW(EX_GRAPH, "Attempted to access RR node xs for non-SOURCE/SINK type " << this->get_rr_type_string());
+	//}
 	return this->xs;
 }
 
 /* get the ys coordinate of this node */
 short RR_Node_Base::get_ys() const{
-	if (this->type != SOURCE && this->type != SINK) {
-		WTHROW(EX_GRAPH, "Attempted to access RR node ys for non-SOURCE/SINK type " << this->get_rr_type_string());
-	}
+	//if (this->type != SOURCE && this->type != SINK) {
+	//	WTHROW(EX_GRAPH, "Attempted to access RR node ys for non-SOURCE/SINK type " << this->get_rr_type_string());
+	//}
 	return this->ys;
 }
 
@@ -1147,7 +1213,8 @@ Grid_Tile::Grid_Tile(){
 	this->type_index = UNDEFINED;
 	this->type_width_offset = UNDEFINED;
 	this->type_height_offset = UNDEFINED;
-	this->type_num_receivers = UNDEFINED;
+	this->type_num_all_receivers = UNDEFINED;
+	this->type_num_sources = UNDEFINED;
 }
 
 /* returns the index of the corresponding physical block type */
@@ -1164,8 +1231,16 @@ int Grid_Tile::get_height_offset() const{
 	return this->type_height_offset;
 }
 
+int Grid_Tile::get_num_all_receivers() const{
+	return this->type_num_all_receivers;
+}
+
 int Grid_Tile::get_num_receivers() const{
 	return this->type_num_receivers;
+}
+
+int Grid_Tile::get_num_sources() const{
+	return this->type_num_sources;
 }
 
 /* sets the index of the block type that is located at this tile */
@@ -1178,13 +1253,21 @@ void Grid_Tile::set_width_offset(int w_offset){
 	this->type_width_offset = w_offset;
 }
 
+/* sets the height offset from the block's origin tile at this tile */
+void Grid_Tile::set_height_offset(int h_offset){
+	this->type_height_offset = h_offset;
+}
+
+void Grid_Tile::set_num_all_receivers(int n_all_receivers) {
+	this->type_num_all_receivers = n_all_receivers;
+}
+
 void Grid_Tile::set_num_receivers(int n_receivers) {
 	this->type_num_receivers = n_receivers;
 }
 
-/* sets the height offset from the block's origin tile at this tile */
-void Grid_Tile::set_height_offset(int h_offset){
-	this->type_height_offset = h_offset;
+void Grid_Tile::set_num_sources(int n_sources) {
+	this->type_num_sources = n_sources;
 }
 /*==== END Grid_Tile Class ====*/
 
