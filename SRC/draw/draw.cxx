@@ -198,31 +198,54 @@ static void drawplace(){
 
 	for (i = 1; i < grid_size_x-1; i++) {
 		for (j = 1; j < grid_size_y-1; j++) {
-			/* Only the first block of a group should control drawing */
-			if (grid[i][j].get_width_offset() > 0 || grid[i][j].get_height_offset() > 0) 
-				continue;
+            int type_index = grid[i][j].get_type_index();
 
-			int type_index = grid[i][j].get_type_index();
-
-
+            Physical_Type_Descriptor *tile_type= &f_arch_structs_ptr->block_type[ type_index ];
+            e_block_type block_type = tile_type->get_block_type();
 			/* Get coords of block */
 			//TODO: this will return the dimensions of a clb, not the size of a multi-height/width block
 			t_bound_box abs_clb_bbox = draw_coords->get_absolute_clb_bbox(i,j);
 
 			/* Fill background for the block */
-			setcolor(LIGHTGREY);
-			fillrect(abs_clb_bbox);
+            if (block_type == EMPTY) {
+                setcolor(WHITE);
+                fillrect(abs_clb_bbox);
+            } else {
+                if (block_type == CLB || block_type == IO) {
+                    setcolor(LIGHTGREY);
+                    fillrect(abs_clb_bbox);
+                    
+                    setcolor(BLACK);
+                    drawrect(abs_clb_bbox);
+                } else if (block_type == MACRO) {
+                    setcolor(BISQUE);
+                    fillrect(abs_clb_bbox);
+                    
+                    if (!(grid[i][j].get_width_offset() > 0 || grid[i][j].get_height_offset() > 0)) {
+                        float left   = draw_coords->tile_x[i];
+                        float bottom = draw_coords->tile_y[j];
+                        float right  = draw_coords->tile_x[i] + draw_coords->get_tile_width();
+                        float top    = draw_coords->tile_y[j + tile_type->get_height() - 1] + draw_coords->get_tile_width();
+                        
+                        t_bound_box abs_macro_bbox(left, bottom, right, top);
+                        
+                        setcolor(THISTLE);
+                        drawrect(abs_macro_bbox);
+                    }
+                }
 
-			setcolor(BLACK);
-			drawrect(abs_clb_bbox);
-
-			/* Draw text for block type so that user knows what block */
-			if (grid[i][j].get_width_offset() == 0 && grid[i][j].get_height_offset() == 0) {
-				if (i > 0 && i < grid_size_x-1 && j > 0 && j < grid_size_y-1) {
-					drawtext(abs_clb_bbox.get_center() - t_point(0, abs_clb_bbox.get_width()/4),
-							f_arch_structs_ptr->block_type[type_index].get_name().c_str(), abs_clb_bbox);
-				}
-			}
+                /* Only the first block of a group should control drawing */
+                if (grid[i][j].get_width_offset() > 0 || grid[i][j].get_height_offset() > 0) 
+                    continue;
+                
+                /* Draw text for block type so that user knows what block */
+                if (grid[i][j].get_width_offset() == 0 && grid[i][j].get_height_offset() == 0) {
+                    if (i > 0 && i < grid_size_x-1 && j > 0 && j < grid_size_y-1) {
+                        drawtext(abs_clb_bbox.get_center() - t_point(0, abs_clb_bbox.get_width()/4),
+                                f_arch_structs_ptr->block_type[type_index].get_name().c_str(), abs_clb_bbox);
+                    }
+                }
+            }
 		}
 	}
 }
