@@ -44,7 +44,7 @@ using namespace std;
 #define WORST_ROUTABILITY_PERCENTILE_FANOUT 0.3
 
 /* with what weights should driver & fanout components of the routability metric be combined */
-#define DRIVER_PROB_WEIGHT 0.5
+#define DRIVER_PROB_WEIGHT 1
 #define FANOUT_PROB_WEIGHT 0.0
 
 #define FRACTION_CONNS 0.1
@@ -531,14 +531,22 @@ float analyze_test_tile_connections(User_Options *user_opts, Analysis_Settings *
 		for (int iclass = 0; iclass < (int)tile_type->class_inf.size(); iclass++){
 			Pin_Class *pin_class = &tile_type->class_inf[iclass];
 
-			if (pin_class->get_pin_type() == DRIVER){
+            if (pin_class->get_pin_type() == DRIVER){
 				/* enumerating from opins basically involves enumerating from the corresponding
 				   source */
-
+                
 				//int source_node_index = routing_structs->rr_node_indices[SOURCE][tile_coord.x][tile_coord.y][iclass];
 				int source_node_index = get_rr_node_index(arch_structs, routing_structs->rr_node_indices, tile_coord.x,
 										tile_coord.y, SOURCE, iclass);
+                
+                if (tile_type->get_block_type() == MACRO) {
+                    int source_x = routing_structs->rr_node[source_node_index].get_xs();
+                    int source_y = routing_structs->rr_node[source_node_index].get_ys();
 
+                    if (source_x != tile_coord.x || source_y != tile_coord.y)
+                        continue;
+                }
+                
 				vector<int> sink_indices;
 				vector<int> ss_length;
 				vector<int> source_conns_at_length;
@@ -570,6 +578,14 @@ float analyze_test_tile_connections(User_Options *user_opts, Analysis_Settings *
 									tile_coord.y, SINK, iclass);
 				int virtual_source_ind = routing_structs->rr_node[sink_node_index].get_virtual_source_node_ind();
 
+                if (tile_type->get_block_type() == MACRO) {
+                    int sink_x = routing_structs->rr_node[sink_node_index].get_xs();
+                    int sink_y = routing_structs->rr_node[sink_node_index].get_ys();
+
+                    if (sink_x != tile_coord.x || sink_y != tile_coord.y)
+                        continue;
+                }
+                
 				if (virtual_source_ind != UNDEFINED){
 					vector<int> sink_indices;
 					vector<int> ss_length;
