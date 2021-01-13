@@ -123,6 +123,12 @@ target_include_directories(wotan PUBLIC ${LIB_INCLUDE_DIRS} PRIVATE ${FREETYPE_I
 target_link_libraries(wotan PUBLIC libwotan PRIVATE Threads::Threads PRIVATE Fontconfig::Fontconfig PRIVATE Freetype::Freetype PRIVATE X11 PRIVATE Xft)
 target_compile_definitions(wotan PUBLIC ${GRAPHICS_DEFINES} PUBLIC "EZXML_NOMMAP" PUBLIC "_POSIX_C_SOURCE" PUBLIC "__USE_FIXED_PROTOTYPES__")
 
+if (CMAKE_BUILD_TYPE MATCHES "Debug")
+    set_target_properties(wotan PROPERTIES OUTPUT_NAME "wotand")
+else()
+    set_target_properties(wotan PROPERTIES OUTPUT_NAME "wotan")
+endif()
+
 #
 # Install wotan
 #
