@@ -218,7 +218,7 @@ static void drawplace(){
                     setcolor(BLACK);
                     drawrect(abs_clb_bbox);
                 } else if (block_type == MACRO) {
-                    setcolor(BISQUE);
+                    setcolor(MEDIUMPURPLE);
                     fillrect(abs_clb_bbox);
                     
                     if (!(grid[i][j].get_width_offset() > 0 || grid[i][j].get_height_offset() > 0)) {
@@ -229,7 +229,7 @@ static void drawplace(){
                         
                         t_bound_box abs_macro_bbox(left, bottom, right, top);
                         
-                        setcolor(THISTLE);
+                        setcolor(MEDIUMPURPLE);
                         drawrect(abs_macro_bbox);
                     }
                 }
